@@ -1024,7 +1024,9 @@ local int LoadCentralDirectoryRecord(zip64_internal* pziinit) {
     ZPOS64_T size_central_dir_to_read = size_central_dir;
     size_t buf_size = SIZEDATA_INDATABLOCK;
     void* buf_read = (void*)ALLOC(buf_size);
-    if (ZSEEK64(pziinit->z_filefunc, pziinit->filestream, offset_central_dir + byte_before_the_zipfile, ZLIB_FILEFUNC_SEEK_SET) != 0)
+    if (buf_read == NULL)
+      err = ZIP_INTERNALERROR;
+    if (err == ZIP_OK && ZSEEK64(pziinit->z_filefunc, pziinit->filestream, offset_central_dir + byte_before_the_zipfile, ZLIB_FILEFUNC_SEEK_SET) != 0)
       err=ZIP_ERRNO;
 
     while ((size_central_dir_to_read>0) && (err==ZIP_OK))
@@ -1393,6 +1395,8 @@ extern int ZEXPORT zipOpenNewFileInZip4_64(zipFile file, const char* filename, c
     zi->ci.size_centralExtraFree = 32; /* Extra space we have reserved in case we need to add ZIP64 extra info data */
 
     zi->ci.central_header = (char*)ALLOC((uInt)zi->ci.size_centralheader + zi->ci.size_centralExtraFree);
+    if (zi->ci.central_header == NULL)
+        return ZIP_INTERNALERROR;
 
     zi->ci.size_centralExtra = size_extrafield_global;
     zip64local_putValue_inmemory(zi->ci.central_header,(uLong)CENTRALHEADERMAGIC,4);
@@ -1435,8 +1439,6 @@ extern int ZEXPORT zipOpenNewFileInZip4_64(zipFile file, const char* filename, c
     for (i=0;i<size_comment;i++)
         *(zi->ci.central_header+SIZECENTRALHEADER+size_filename+
               size_extrafield_global+i) = *(comment+i);
-    if (zi->ci.central_header == NULL)
-        return ZIP_INTERNALERROR;
 
     zi->ci.zip64 = zip64;
     zi->ci.totalCompressedData = 0;
@@ -2202,6 +2204,8 @@ extern int ZEXPORT zipRemoveExtraInfoBlock(char* pData, int* dataLen, short sHea
     return ZIP_PARAMERROR;
 
   pNewHeader = (char*)ALLOC((unsigned)*dataLen);
+  if (pNewHeader == NULL)
+    return ZIP_INTERNALERROR;
   pTmp = pNewHeader;
 
   while(p < (pData + *dataLen))

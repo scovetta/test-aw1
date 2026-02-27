@@ -491,6 +491,344 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test crc32() and adler32() checksum functions
+ */
+static void test_checksums(void) {
+    uLong crc, adler;
+    const char *data1 = "hello";
+    const char *data2 = ", world";
+
+    /* Basic crc32 */
+    crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, (const Bytef*)data1, (uInt)strlen(data1));
+    if (crc == 0) {
+        fprintf(stderr, "bad crc32\n");
+        exit(1);
+    }
+
+    /* Incremental crc32 */
+    {
+        uLong crc2 = crc32(0L, Z_NULL, 0);
+        uLong crc_combined;
+        crc2 = crc32(crc2, (const Bytef*)data1, (uInt)strlen(data1));
+        crc2 = crc32(crc2, (const Bytef*)data2, (uInt)strlen(data2));
+
+        crc_combined = crc32(0L, Z_NULL, 0);
+        crc_combined = crc32(crc_combined, (const Bytef*)data1, (uInt)strlen(data1));
+        crc_combined = crc32(crc_combined, (const Bytef*)data2, (uInt)strlen(data2));
+
+        if (crc2 != crc_combined) {
+            fprintf(stderr, "bad incremental crc32\n");
+            exit(1);
+        }
+    }
+
+    /* Basic adler32 */
+    adler = adler32(0L, Z_NULL, 0);
+    adler = adler32(adler, (const Bytef*)data1, (uInt)strlen(data1));
+    if (adler == 0) {
+        fprintf(stderr, "bad adler32\n");
+        exit(1);
+    }
+
+    /* Incremental adler32 */
+    {
+        uLong adler2 = adler32(0L, Z_NULL, 0);
+        uLong adler_combined;
+        adler2 = adler32(adler2, (const Bytef*)data1, (uInt)strlen(data1));
+        adler2 = adler32(adler2, (const Bytef*)data2, (uInt)strlen(data2));
+
+        adler_combined = adler32(0L, Z_NULL, 0);
+        adler_combined = adler32(adler_combined, (const Bytef*)data1, (uInt)strlen(data1));
+        adler_combined = adler32(adler_combined, (const Bytef*)data2, (uInt)strlen(data2));
+
+        if (adler2 != adler_combined) {
+            fprintf(stderr, "bad incremental adler32\n");
+            exit(1);
+        }
+    }
+
+    printf("checksums(): OK\n");
+}
+
+/* ===========================================================================
+ * Test compress2() and compressBound()
+ */
+static void test_compress2(Byte *compr, uLong comprLen, Byte *uncompr,
+                            uLong uncomprLen) {
+    int err;
+    uLong len = (uLong)strlen(hello) + 1;
+    uLong bound;
+    int level;
+
+    /* Test compressBound */
+    bound = compressBound(len);
+    if (bound < len) {
+        fprintf(stderr, "bad compressBound\n");
+        exit(1);
+    }
+
+    /* Test compress2 with several compression levels */
+    for (level = Z_BEST_SPEED; level <= Z_BEST_COMPRESSION; level++) {
+        uLong cLen = comprLen;
+        uLong uLen = uncomprLen;
+
+        err = compress2(compr, &cLen, (const Bytef*)hello, len, level);
+        CHECK_ERR(err, "compress2");
+
+        strcpy((char*)uncompr, "garbage");
+        err = uncompress(uncompr, &uLen, compr, cLen);
+        CHECK_ERR(err, "uncompress (compress2)");
+
+        if (strcmp((char*)uncompr, hello)) {
+            fprintf(stderr, "bad compress2 at level %d\n", level);
+            exit(1);
+        }
+    }
+    printf("compress2(): OK\n");
+}
+
+/* ===========================================================================
+ * Test deflateInit2() with raw deflate and gzip format
+ */
+static void test_deflate_init2(Byte *compr, uLong comprLen, Byte *uncompr,
+                                uLong uncomprLen) {
+    int err;
+    z_stream c_stream;
+    z_stream d_stream;
+    uLong len = (uLong)strlen(hello) + 1;
+
+    /* Raw deflate (negative windowBits) */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit2(&c_stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                       -15, 8, Z_DEFAULT_STRATEGY);
+    CHECK_ERR(err, "deflateInit2 raw");
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (raw) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd raw");
+
+    /* Inflate raw */
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)c_stream.total_out;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflateInit2(&d_stream, -15);
+    CHECK_ERR(err, "inflateInit2 raw");
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (raw) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd raw");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad deflateInit2 raw round-trip\n");
+        exit(1);
+    }
+    printf("deflateInit2(): OK\n");
+}
+
+/* ===========================================================================
+ * Test deflateReset() and inflateReset() for stream reuse
+ */
+static void test_stream_reset(Byte *compr, uLong comprLen, Byte *uncompr,
+                               uLong uncomprLen) {
+    int err;
+    z_stream c_stream;
+    z_stream d_stream;
+    uLong len = (uLong)strlen(hello) + 1;
+    uLong cLen1, cLen2;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    /* First compression */
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+    cLen1 = c_stream.total_out;
+
+    /* Reset and compress again */
+    err = deflateReset(&c_stream);
+    CHECK_ERR(err, "deflateReset");
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate after reset should report Z_STREAM_END\n");
+        exit(1);
+    }
+    cLen2 = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    if (cLen1 != cLen2) {
+        fprintf(stderr, "deflateReset produced different output sizes\n");
+        exit(1);
+    }
+
+    /* Inflate with reset */
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)cLen1;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    /* Reset and inflate again */
+    err = inflateReset(&d_stream);
+    CHECK_ERR(err, "inflateReset");
+
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)cLen1;
+    strcpy((char*)uncompr, "garbage");
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate after reset should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad stream_reset inflate result\n");
+        exit(1);
+    }
+    printf("stream_reset(): OK\n");
+}
+
+/* ===========================================================================
+ * Test compress/inflate with empty (zero-length) input
+ */
+static void test_empty_input(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    int err;
+    uLong cLen = comprLen;
+    uLong uLen = uncomprLen;
+
+    /* compress with zero-length input */
+    err = compress(compr, &cLen, (const Bytef*)"", 0);
+    CHECK_ERR(err, "compress empty");
+
+    /* uncompress the empty stream */
+    err = uncompress(uncompr, &uLen, compr, cLen);
+    CHECK_ERR(err, "uncompress empty");
+
+    if (uLen != 0) {
+        fprintf(stderr, "bad empty uncompress: expected 0 bytes, got %lu\n", uLen);
+        exit(1);
+    }
+    printf("empty_input(): OK\n");
+}
+
+/* ===========================================================================
+ * Test deflate() with Z_SYNC_FLUSH
+ */
+static void test_sync_flush(Byte *compr, uLong comprLen, Byte *uncompr,
+                             uLong uncomprLen) {
+    int err;
+    z_stream c_stream;
+    z_stream d_stream;
+    uLong len = (uLong)strlen(hello) + 1;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len / 2;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_SYNC_FLUSH);
+    CHECK_ERR(err, "deflate Z_SYNC_FLUSH");
+
+    c_stream.avail_in = (uInt)len - (uInt)len / 2;
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)c_stream.total_out;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (sync_flush) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad sync_flush inflate result\n");
+        exit(1);
+    }
+    printf("sync_flush(): OK\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +882,13 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_checksums();
+    test_compress2(compr, comprLen, uncompr, uncomprLen);
+    test_deflate_init2(compr, comprLen, uncompr, uncomprLen);
+    test_stream_reset(compr, comprLen, uncompr, uncomprLen);
+    test_empty_input(compr, comprLen, uncompr, uncomprLen);
+    test_sync_flush(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
