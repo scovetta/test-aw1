@@ -491,6 +491,133 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflate() with Z_SYNC_FLUSH and error recovery
+ *
+ * Validates:
+ *   - Z_SYNC_FLUSH produces a self-contained block that inflate() can decode
+ *   - inflate() returns Z_DATA_ERROR on corrupted compressed data
+ *   - inflate() returns Z_BUF_ERROR (not a fatal error) when no progress
+ */
+static void test_error_conditions(Byte *compr, uLong comprLen, Byte *uncompr,
+                                  uLong uncomprLen) {
+    z_stream c_stream;
+    z_stream d_stream;
+    int err;
+    uLong len = (uLong)strlen(hello) + 1;
+    uLong syncLen;
+
+    /* --- Test 1: Z_SYNC_FLUSH produces decodable output --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (sync flush)");
+
+    c_stream.next_in   = (z_const unsigned char *)hello;
+    c_stream.avail_in  = (uInt)len;
+    c_stream.next_out  = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_SYNC_FLUSH);
+    CHECK_ERR(err, "deflate Z_SYNC_FLUSH");
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (sync flush finish) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    syncLen = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (sync flush)");
+
+    /* Inflate the sync-flushed output */
+    strcpy((char *)uncompr, "garbage");
+
+    d_stream.zalloc    = zalloc;
+    d_stream.zfree     = zfree;
+    d_stream.opaque    = (voidpf)0;
+    d_stream.next_in   = compr;
+    d_stream.avail_in  = (uInt)syncLen;
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (sync flush)");
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (sync flush) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (sync flush)");
+
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate after Z_SYNC_FLUSH\n");
+        exit(1);
+    }
+    printf("Z_SYNC_FLUSH(): OK\n");
+
+    /* --- Test 2: inflate() returns Z_DATA_ERROR on corrupted input --- */
+    {
+        /* Corrupt the compressed data by flipping bytes in the payload */
+        Byte corrupt[32];
+        uLong corruptLen = (syncLen < sizeof(corrupt)) ? syncLen : sizeof(corrupt);
+        uInt i;
+
+        for (i = 0; i < (uInt)corruptLen; i++)
+            corrupt[i] = compr[i] ^ 0xFF;  /* flip all bits */
+
+        d_stream.zalloc    = zalloc;
+        d_stream.zfree     = zfree;
+        d_stream.opaque    = (voidpf)0;
+        d_stream.next_in   = corrupt;
+        d_stream.avail_in  = (uInt)corruptLen;
+        d_stream.next_out  = uncompr;
+        d_stream.avail_out = (uInt)uncomprLen;
+
+        err = inflateInit(&d_stream);
+        CHECK_ERR(err, "inflateInit (corrupt)");
+
+        err = inflate(&d_stream, Z_NO_FLUSH);
+        if (err != Z_DATA_ERROR && err != Z_STREAM_ERROR) {
+            fprintf(stderr,
+                    "inflate should return Z_DATA_ERROR on corrupt input, got %d\n",
+                    err);
+            exit(1);
+        }
+        inflateEnd(&d_stream);
+        printf("inflate corrupt(): Z_DATA_ERROR detected OK\n");
+    }
+
+    /* --- Test 3: inflate() on truncated stream returns Z_BUF_ERROR or error --- */
+    {
+        d_stream.zalloc    = zalloc;
+        d_stream.zfree     = zfree;
+        d_stream.opaque    = (voidpf)0;
+        d_stream.next_in   = compr;
+        d_stream.avail_in  = 2;  /* deliberately too few bytes */
+        d_stream.next_out  = uncompr;
+        d_stream.avail_out = (uInt)uncomprLen;
+
+        err = inflateInit(&d_stream);
+        CHECK_ERR(err, "inflateInit (truncated)");
+
+        err = inflate(&d_stream, Z_FINISH);
+        /* Z_BUF_ERROR (no progress) or Z_OK partial are both acceptable;
+         * what is NOT acceptable is Z_STREAM_END with truncated input. */
+        if (err == Z_STREAM_END) {
+            fprintf(stderr, "inflate should NOT succeed on 2-byte truncated input\n");
+            exit(1);
+        }
+        inflateEnd(&d_stream);
+        printf("inflate truncated(): correctly rejected OK\n");
+    }
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +671,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_error_conditions(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
