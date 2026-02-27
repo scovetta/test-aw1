@@ -22,30 +22,37 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"72ff98c5763ad85e2c5bb99e465013c57cacd566d196a7c592aff1b171cf8b98","compiler_version":"v0.50.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"68d85f8682866f34b4b12824662fe86a0f46ee3ffbf9164702f0946b7b234cf8","compiler_version":"v0.50.5"}
 
-name: "Product Manager Orchestrator"
+name: "Fixer Agent"
 "on":
-  schedule:
-  - cron: "0 6 * * *"
+  issues:
+    types:
+    - opened
+    - labeled
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: "gh-aw-${{ github.workflow }}"
+  group: "gh-aw-${{ github.workflow }}-${{ github.event.issue.number }}"
 
-run-name: "Product Manager Orchestrator"
+run-name: "Fixer Agent"
 
 jobs:
   activation:
+    needs: pre_activation
+    if: needs.pre_activation.outputs.activated == 'true'
     runs-on: ubuntu-slim
     permissions:
       contents: read
     outputs:
+      body: ${{ steps.sanitized.outputs.body }}
       comment_id: ""
       comment_repo: ""
       secret_verification_result: ${{ steps.validate-secret.outputs.verification_result }}
+      text: ${{ steps.sanitized.outputs.text }}
+      title: ${{ steps.sanitized.outputs.title }}
     steps:
       - name: Setup Scripts
         uses: github/gh-aw/actions/setup@a7d371cc7e68f270ded0592942424548e05bf1c2 # v0.50.5
@@ -75,12 +82,21 @@ jobs:
       - name: Check workflow file timestamps
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          GH_AW_WORKFLOW_FILE: "pm-orchestrator.lock.yml"
+          GH_AW_WORKFLOW_FILE: "fixer-agent.lock.yml"
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/check_workflow_timestamp_api.cjs');
+            await main();
+      - name: Compute current body text
+        id: sanitized
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/compute_text.cjs');
             await main();
       - name: Create prompt with built-in context
         env:
@@ -107,7 +123,7 @@ jobs:
           cat "/opt/gh-aw/prompts/safe_outputs_prompt.md"
           cat << 'GH_AW_PROMPT_EOF'
           <safe-output-tools>
-          Tools: add_comment, create_issue, add_labels, dispatch_workflow, missing_tool, missing_data
+          Tools: add_comment, add_labels, assign_to_agent, missing_tool, missing_data
           </safe-output-tools>
           <github-context>
           The following GitHub context information is available for this workflow:
@@ -142,7 +158,7 @@ jobs:
           </system>
           GH_AW_PROMPT_EOF
           cat << 'GH_AW_PROMPT_EOF'
-          {{#runtime-import .github/workflows/pm-orchestrator.md}}
+          {{#runtime-import .github/workflows/fixer-agent.md}}
           GH_AW_PROMPT_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
@@ -170,6 +186,7 @@ jobs:
           GH_AW_GITHUB_REPOSITORY: ${{ github.repository }}
           GH_AW_GITHUB_RUN_ID: ${{ github.run_id }}
           GH_AW_GITHUB_WORKSPACE: ${{ github.workspace }}
+          GH_AW_NEEDS_PRE_ACTIVATION_OUTPUTS_ACTIVATED: ${{ needs.pre_activation.outputs.activated }}
         with:
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
@@ -191,7 +208,8 @@ jobs:
                 GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER: process.env.GH_AW_GITHUB_EVENT_PULL_REQUEST_NUMBER,
                 GH_AW_GITHUB_REPOSITORY: process.env.GH_AW_GITHUB_REPOSITORY,
                 GH_AW_GITHUB_RUN_ID: process.env.GH_AW_GITHUB_RUN_ID,
-                GH_AW_GITHUB_WORKSPACE: process.env.GH_AW_GITHUB_WORKSPACE
+                GH_AW_GITHUB_WORKSPACE: process.env.GH_AW_GITHUB_WORKSPACE,
+                GH_AW_NEEDS_PRE_ACTIVATION_OUTPUTS_ACTIVATED: process.env.GH_AW_NEEDS_PRE_ACTIVATION_OUTPUTS_ACTIVATED
               }
             });
       - name: Validate prompt placeholders
@@ -214,8 +232,6 @@ jobs:
     needs: activation
     runs-on: ubuntu-latest
     permissions: read-all
-    concurrency:
-      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""
@@ -225,7 +241,7 @@ jobs:
       GH_AW_SAFE_OUTPUTS: /opt/gh-aw/safeoutputs/outputs.jsonl
       GH_AW_SAFE_OUTPUTS_CONFIG_PATH: /opt/gh-aw/safeoutputs/config.json
       GH_AW_SAFE_OUTPUTS_TOOLS_PATH: /opt/gh-aw/safeoutputs/tools.json
-      GH_AW_WORKFLOW_ID_SANITIZED: pmorchestrator
+      GH_AW_WORKFLOW_ID_SANITIZED: fixeragent
     outputs:
       checkout_pr_success: ${{ steps.checkout-pr.outputs.checkout_pr_success || 'true' }}
       detection_conclusion: ${{ steps.detection_conclusion.outputs.conclusion }}
@@ -295,7 +311,7 @@ jobs:
               version: "",
               agent_version: "0.0.418",
               cli_version: "v0.50.5",
-              workflow_name: "Product Manager Orchestrator",
+              workflow_name: "Fixer Agent",
               experimental: false,
               supports_tools_allowlist: true,
               run_id: context.runId,
@@ -347,51 +363,10 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"add_comment":{"max":3,"target":"*"},"add_labels":{"allowed":["security","testing","maintenance","needs-review","approved","blocked"],"max":5,"target":"*"},"create_issue":{"expires":48,"max":1},"dispatch_workflow":{"max":6,"workflow_files":{"builder-agent":".lock.yml","code-maintainer":".lock.yml","dependency-updater":".lock.yml","fixer-agent":".lock.yml","security-auditor":".lock.yml","test-guardian":".lock.yml"},"workflows":["security-auditor","test-guardian","code-maintainer","fixer-agent","builder-agent","dependency-updater"]},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
+          {"add_comment":{"max":3,"target":"*"},"add_labels":{"allowed":["fix-in-progress","fix-assigned","wontfix","needs-human-review"],"max":3,"target":"*"},"assign_to_agent":{"default_agent":"copilot","max":3,"target":"*"},"missing_data":{},"missing_tool":{},"noop":{"max":1}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_EOF'
           [
-            {
-              "description": "Create a new GitHub issue for tracking bugs, feature requests, or tasks. Use this for actionable work items that need assignment, labeling, and status tracking. For reports, announcements, or status updates that don't require task tracking, use create_discussion instead. CONSTRAINTS: Maximum 1 issue(s) can be created. Title will be prefixed with \"[pm-daily] \". Labels [automation pm-orchestrator] will be automatically added.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {
-                  "body": {
-                    "description": "Detailed issue description in Markdown. Do NOT repeat the title as a heading since it already appears as the issue's h1. Include context, reproduction steps, or acceptance criteria as appropriate.",
-                    "type": "string"
-                  },
-                  "labels": {
-                    "description": "Labels to categorize the issue (e.g., 'bug', 'enhancement'). Labels must exist in the repository.",
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  "parent": {
-                    "description": "Parent issue number for creating sub-issues. This is the numeric ID from the GitHub URL (e.g., 42 in github.com/owner/repo/issues/42). Can also be a temporary_id (e.g., 'aw_abc123', 'aw_Test123') from a previously created issue in the same workflow run.",
-                    "type": [
-                      "number",
-                      "string"
-                    ]
-                  },
-                  "temporary_id": {
-                    "description": "Unique temporary identifier for referencing this issue before it's created. Format: 'aw_' followed by 3 to 8 alphanumeric characters (e.g., 'aw_abc1', 'aw_Test123'). Use '#aw_ID' in body text to reference other issues by their temporary_id; these are replaced with actual issue numbers after creation.",
-                    "pattern": "^aw_[A-Za-z0-9]{3,8}$",
-                    "type": "string"
-                  },
-                  "title": {
-                    "description": "Concise issue title summarizing the bug, feature, or task. The title appears as the main heading, so keep it brief and descriptive.",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "title",
-                  "body"
-                ],
-                "type": "object"
-              },
-              "name": "create_issue"
-            },
             {
               "description": "Add a comment to an existing GitHub issue, pull request, or discussion. Use this to provide feedback, answer questions, or add information to an existing conversation. For creating new items, use create_issue, create_discussion, or create_pull_request instead. IMPORTANT: Comments are subject to validation constraints enforced by the MCP server - maximum 65536 characters for the complete comment (including footer which is added automatically), 10 mentions (@username), and 50 links. Exceeding these limits will result in an immediate error with specific guidance. NOTE: By default, this tool requires discussions:write permission. If your GitHub App lacks Discussions permission, set 'discussions: false' in the workflow's safe-outputs.add-comment configuration to exclude this permission. CONSTRAINTS: Maximum 3 comment(s) can be added. Target: *.",
               "inputSchema": {
@@ -414,7 +389,7 @@ jobs:
               "name": "add_comment"
             },
             {
-              "description": "Add labels to an existing GitHub issue or pull request for categorization and filtering. Labels must already exist in the repository. For creating new issues with labels, use create_issue with the labels property instead. CONSTRAINTS: Maximum 5 label(s) can be added. Only these labels are allowed: [security testing maintenance needs-review approved blocked]. Target: *.",
+              "description": "Add labels to an existing GitHub issue or pull request for categorization and filtering. Labels must already exist in the repository. For creating new issues with labels, use create_issue with the labels property instead. CONSTRAINTS: Maximum 3 label(s) can be added. Only these labels are allowed: [fix-in-progress fix-assigned wontfix needs-human-review]. Target: *.",
               "inputSchema": {
                 "additionalProperties": false,
                 "properties": {
@@ -433,6 +408,38 @@ jobs:
                 "type": "object"
               },
               "name": "add_labels"
+            },
+            {
+              "description": "Assign the GitHub Copilot coding agent to work on an issue or pull request. The agent will analyze the issue/PR and attempt to implement a solution, creating a pull request when complete. Use this to delegate coding tasks to Copilot. Example usage: assign_to_agent(issue_number=123, agent=\"copilot\") or assign_to_agent(pull_number=456, agent=\"copilot\", pull_request_repo=\"owner/repo\") CONSTRAINTS: Maximum 3 issue(s) can be assigned to agent.",
+              "inputSchema": {
+                "additionalProperties": false,
+                "properties": {
+                  "agent": {
+                    "description": "Agent identifier to assign. Defaults to 'copilot' (the Copilot coding agent) if not specified.",
+                    "type": "string"
+                  },
+                  "issue_number": {
+                    "description": "Issue number to assign the Copilot coding agent to. This is the numeric ID from the GitHub URL (e.g., 234 in github.com/owner/repo/issues/234). Can also be a temporary_id (e.g., 'aw_abc123', 'aw_Test123') from an issue created earlier in the same workflow run. The issue should contain clear, actionable requirements. Either issue_number or pull_number must be provided, but not both.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "pull_number": {
+                    "description": "Pull request number to assign the Copilot coding agent to. This is the numeric ID from the GitHub URL (e.g., 456 in github.com/owner/repo/pull/456). Either issue_number or pull_number must be provided, but not both.",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "pull_request_repo": {
+                    "description": "Target repository where the pull request should be created, in 'owner/repo' format. If omitted, the PR will be created in the same repository as the issue. This allows issues and code to live in different repositories. The global pull-request-repo configuration (if set) is automatically allowed; additional repositories must be listed in allowed-pull-request-repos.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "name": "assign_to_agent"
             },
             {
               "description": "Report that a tool or capability needed to complete the task is not available, or share any information you deem important about missing functionality or limitations. Use this when you cannot accomplish what was requested because the required functionality is missing or access is restricted.",
@@ -502,66 +509,6 @@ jobs:
                 "type": "object"
               },
               "name": "missing_data"
-            },
-            {
-              "_workflow_name": "security-auditor",
-              "description": "Dispatch the 'security-auditor' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "security_auditor"
-            },
-            {
-              "_workflow_name": "test-guardian",
-              "description": "Dispatch the 'test-guardian' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "test_guardian"
-            },
-            {
-              "_workflow_name": "code-maintainer",
-              "description": "Dispatch the 'code-maintainer' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "code_maintainer"
-            },
-            {
-              "_workflow_name": "fixer-agent",
-              "description": "Dispatch the 'fixer-agent' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "fixer_agent"
-            },
-            {
-              "_workflow_name": "builder-agent",
-              "description": "Dispatch the 'builder-agent' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "builder_agent"
-            },
-            {
-              "_workflow_name": "dependency-updater",
-              "description": "Dispatch the 'dependency-updater' workflow with workflow_dispatch trigger. This workflow must support workflow_dispatch and be in .github/workflows/ directory in the same repository.",
-              "inputSchema": {
-                "additionalProperties": false,
-                "properties": {},
-                "type": "object"
-              },
-              "name": "dependency_updater"
             }
           ]
           GH_AW_SAFE_OUTPUTS_TOOLS_EOF
@@ -604,38 +551,30 @@ jobs:
                 }
               }
             },
-            "create_issue": {
+            "assign_to_agent": {
               "defaultMax": 1,
               "fields": {
-                "body": {
-                  "required": true,
+                "agent": {
                   "type": "string",
                   "sanitize": true,
-                  "maxLength": 65000
+                  "maxLength": 128
                 },
-                "labels": {
-                  "type": "array",
-                  "itemType": "string",
-                  "itemSanitize": true,
-                  "itemMaxLength": 128
+                "issue_number": {
+                  "issueNumberOrTemporaryId": true
                 },
-                "parent": {
-                  "issueOrPRNumber": true
+                "pull_number": {
+                  "optionalPositiveInteger": true
+                },
+                "pull_request_repo": {
+                  "type": "string",
+                  "maxLength": 256
                 },
                 "repo": {
                   "type": "string",
                   "maxLength": 256
-                },
-                "temporary_id": {
-                  "type": "string"
-                },
-                "title": {
-                  "required": true,
-                  "type": "string",
-                  "sanitize": true,
-                  "maxLength": 128
                 }
-              }
+              },
+              "customValidation": "requiresOneOf:issue_number,pull_number"
             },
             "missing_data": {
               "defaultMax": 20,
@@ -1007,7 +946,7 @@ jobs:
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
-          WORKFLOW_NAME: "Product Manager Orchestrator"
+          WORKFLOW_NAME: "Fixer Agent"
           WORKFLOW_DESCRIPTION: "No description provided"
           HAS_PATCH: ${{ steps.collect_output.outputs.has_patch }}
         with:
@@ -1097,7 +1036,6 @@ jobs:
     if: (always()) && (needs.agent.result != 'skipped')
     runs-on: ubuntu-slim
     permissions:
-      actions: write
       contents: read
       discussions: write
       issues: write
@@ -1128,7 +1066,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
           GH_AW_NOOP_MAX: "1"
-          GH_AW_WORKFLOW_NAME: "Product Manager Orchestrator"
+          GH_AW_WORKFLOW_NAME: "Fixer Agent"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1141,7 +1079,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Product Manager Orchestrator"
+          GH_AW_WORKFLOW_NAME: "Fixer Agent"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -1154,12 +1092,14 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Product Manager Orchestrator"
+          GH_AW_WORKFLOW_NAME: "Fixer Agent"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
-          GH_AW_WORKFLOW_ID: "pm-orchestrator"
+          GH_AW_WORKFLOW_ID: "fixer-agent"
           GH_AW_SECRET_VERIFICATION_RESULT: ${{ needs.activation.outputs.secret_verification_result }}
           GH_AW_CHECKOUT_PR_SUCCESS: ${{ needs.agent.outputs.checkout_pr_success }}
+          GH_AW_ASSIGNMENT_ERRORS: ${{ needs.safe_outputs.outputs.assign_to_agent_assignment_errors }}
+          GH_AW_ASSIGNMENT_ERROR_COUNT: ${{ needs.safe_outputs.outputs.assign_to_agent_assignment_error_count }}
           GH_AW_GROUP_REPORTS: "false"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1173,7 +1113,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Product Manager Orchestrator"
+          GH_AW_WORKFLOW_NAME: "Fixer Agent"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
           GH_AW_NOOP_MESSAGE: ${{ steps.noop.outputs.noop_message }}
@@ -1186,12 +1126,34 @@ jobs:
             const { main } = require('/opt/gh-aw/actions/handle_noop_message.cjs');
             await main();
 
+  pre_activation:
+    runs-on: ubuntu-slim
+    outputs:
+      activated: ${{ steps.check_membership.outputs.is_team_member == 'true' }}
+      matched_command: ''
+    steps:
+      - name: Setup Scripts
+        uses: github/gh-aw/actions/setup@a7d371cc7e68f270ded0592942424548e05bf1c2 # v0.50.5
+        with:
+          destination: /opt/gh-aw/actions
+      - name: Check team membership for workflow
+        id: check_membership
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_AW_REQUIRED_ROLES: admin,maintainer,write
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/check_membership.cjs');
+            await main();
+
   safe_outputs:
     needs: agent
     if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (needs.agent.outputs.detection_success == 'true')
     runs-on: ubuntu-slim
     permissions:
-      actions: write
       contents: read
       discussions: write
       issues: write
@@ -1199,9 +1161,12 @@ jobs:
     timeout-minutes: 15
     env:
       GH_AW_ENGINE_ID: "copilot"
-      GH_AW_WORKFLOW_ID: "pm-orchestrator"
-      GH_AW_WORKFLOW_NAME: "Product Manager Orchestrator"
+      GH_AW_WORKFLOW_ID: "fixer-agent"
+      GH_AW_WORKFLOW_NAME: "Fixer Agent"
     outputs:
+      assign_to_agent_assigned: ${{ steps.assign_to_agent.outputs.assigned }}
+      assign_to_agent_assignment_error_count: ${{ steps.assign_to_agent.outputs.assignment_error_count }}
+      assign_to_agent_assignment_errors: ${{ steps.assign_to_agent.outputs.assignment_errors }}
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
       create_discussion_error_count: ${{ steps.process_safe_outputs.outputs.create_discussion_error_count }}
@@ -1229,13 +1194,29 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":3,\"target\":\"*\"},\"add_labels\":{\"allowed\":[\"security\",\"testing\",\"maintenance\",\"needs-review\",\"approved\",\"blocked\"],\"max\":5,\"target\":\"*\"},\"create_issue\":{\"close_older_issues\":true,\"expires\":48,\"labels\":[\"automation\",\"pm-orchestrator\"],\"max\":1,\"title_prefix\":\"[pm-daily] \"},\"dispatch_workflow\":{\"max\":6,\"workflow_files\":{\"builder-agent\":\".lock.yml\",\"code-maintainer\":\".lock.yml\",\"dependency-updater\":\".lock.yml\",\"fixer-agent\":\".lock.yml\",\"security-auditor\":\".lock.yml\",\"test-guardian\":\".lock.yml\"},\"workflows\":[\"security-auditor\",\"test-guardian\",\"code-maintainer\",\"fixer-agent\",\"builder-agent\",\"dependency-updater\"]},\"missing_data\":{},\"missing_tool\":{}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":3,\"target\":\"*\"},\"add_labels\":{\"allowed\":[\"fix-in-progress\",\"fix-assigned\",\"wontfix\",\"needs-human-review\"],\"max\":3,\"target\":\"*\"},\"missing_data\":{},\"missing_tool\":{}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
             setupGlobals(core, github, context, exec, io);
             const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
+            await main();
+      - name: Assign to agent
+        id: assign_to_agent
+        if: ((!cancelled()) && (needs.agent.result != 'skipped')) && (contains(needs.agent.outputs.output_types, 'assign_to_agent'))
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
+          GH_AW_AGENT_MAX_COUNT: 3
+          GH_AW_AGENT_DEFAULT: "copilot"
+          GH_AW_AGENT_TARGET: "*"
+        with:
+          github-token: ${{ secrets.GH_AW_AGENT_TOKEN || secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+            setupGlobals(core, github, context, exec, io);
+            const { main } = require('/opt/gh-aw/actions/assign_to_agent.cjs');
             await main();
       - name: Upload safe output items manifest
         if: always()
@@ -1251,7 +1232,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     env:
-      GH_AW_WORKFLOW_ID_SANITIZED: pmorchestrator
+      GH_AW_WORKFLOW_ID_SANITIZED: fixeragent
     steps:
       - name: Setup Scripts
         uses: github/gh-aw/actions/setup@a7d371cc7e68f270ded0592942424548e05bf1c2 # v0.50.5

@@ -11,8 +11,8 @@ tools:
 
 safe-outputs:
   dispatch-workflow:
-    workflows: [security-auditor, test-guardian, code-maintainer]
-    max: 3
+    workflows: [security-auditor, test-guardian, code-maintainer, fixer-agent, builder-agent, dependency-updater]
+    max: 6
   create-issue:
     title-prefix: "[pm-daily] "
     labels: [automation, pm-orchestrator]
@@ -50,6 +50,9 @@ Each day, perform the following orchestration:
    - `security-auditor` — Scan for security vulnerabilities in C source files
    - `test-guardian` — Analyze test coverage and propose improvements
    - `code-maintainer` — Identify cleanup, documentation, and quality improvements
+   - `fixer-agent` — Pick up actionable issues and assign to Copilot for fixing
+   - `builder-agent` — Analyze build systems, verify release readiness
+   - `dependency-updater` — Check for outdated dependencies and propose updates
 
    Note: The `daily-report` workflow runs on its own delayed schedule (8:00 UTC) to consolidate findings after workers complete.
 5. **Create a daily status issue** summarizing:

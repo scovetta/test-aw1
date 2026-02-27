@@ -92,10 +92,21 @@ For each changed file, verify:
 ## Special Attention
 
 ### Agent-Generated PRs
-If the PR was created by `test-guardian` or `code-maintainer` (check for `[test-improvement]` or `[cleanup]` title prefixes):
+If the PR was created by an agent, check the title prefix to identify the source:
+- `[test-improvement]` — from Test Guardian
+- `[cleanup]` — from Code Maintainer
+- `[build-improvement]` — from Builder Agent
+- `[dep-update]` — from Dependency Updater
+- Copilot-generated PRs — from Fixer Agent assignments
+
+For all agent-generated PRs:
 - Verify changes match the PR description
 - Ensure no scope creep (e.g., a "cleanup" PR shouldn't change behavior)
-- Check that draft status is appropriate
+- **APPROVE** documentation, test, and cosmetic-only changes after verifying correctness
+- **APPROVE** build system fixes that don't affect compiled output
+- **APPROVE** dependency version pin updates (GitHub Actions SHA pins, CMake version bumps)
+- **COMMENT** with `needs-human-review` for any changes touching library source code
+- **REQUEST_CHANGES** if the PR introduces behavioral changes or scope creep
 
 ### External PRs
 If the PR is from an external contributor:
