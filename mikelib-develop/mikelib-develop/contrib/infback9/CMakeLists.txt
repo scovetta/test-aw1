@@ -1,0 +1,19 @@
+if(MIKELIB_BUILD_SHARED)
+    target_sources(mikelib
+        PRIVATE
+            infback9.c
+            inftree9.c
+            infback9.h
+            inffix9.h
+            inftree9.h)
+endif(MIKELIB_BUILD_SHARED)
+
+if(MIKELIB_BUILD_STATIC)
+    target_sources(mikelibstatic
+        PRIVATE
+            infback9.c
+            inftree9.c
+            infback9.h
+            inffix9.h
+            inftree9.h)
+endif(MIKELIB_BUILD_STATIC)
