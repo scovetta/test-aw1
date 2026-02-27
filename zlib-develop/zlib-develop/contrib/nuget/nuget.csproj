@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.Build.NoTargets/3.5.6">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <PackageId>madler.zlib.redist</PackageId>
     <PackageId Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(PackageId).win</PackageId>
     <PackageId Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(PackageId).linux</PackageId>
