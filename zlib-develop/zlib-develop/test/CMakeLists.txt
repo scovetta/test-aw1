@@ -107,7 +107,7 @@ if(ZLIB_BUILD_STATIC)
                 ${CMAKE_CURRENT_SOURCE_DIR}/infcover.c -o
                 ${INFCOVER_DIR}/infcover.c.gcda)
         set_tests_properties(zlib_coverage-summary PROPERTIES DEPENDS
-                                                              zlib-coverage)
+                                                              zlib_coverage)
         set(CMAKE_C_FLAGS
             ${CFLAGS_OLD}
             CACHE STRING "" FORCE)
