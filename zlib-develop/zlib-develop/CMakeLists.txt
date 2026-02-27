@@ -32,7 +32,7 @@ get_property(IS_MULTI GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT DEFINED CMAKE_BUILD_TYPE AND NOT IS_MULTI)
     message(STATUS "No CMAKE_BUILD_TYPE set -- using Release")
     set(CMAKE_BUILD_TYPE Release)
-endif(NOT DEFINED CMAKE_BUILD_TYPE AND NOT IS_MULTI)
+endif()
 
 include(CheckCSourceCompiles)
 include(CheckFunctionExists)
@@ -59,17 +59,17 @@ if(NOT ZLIB_CONF_WRITTEN)
         if(FIRST_ITEM)
             string(APPEND OUT_CONTENT ${item})
             set(FIRST_ITEM FALSE)
-        else(FIRST_ITEM)
+        else()
             string(APPEND OUT_CONTENT "\;" ${item})
-        endif(FIRST_ITEM)
-    endforeach(item IN LISTS ${ZCONF_CONTENT})
+        endif()
+    endforeach()
 
     file(APPEND ${CONF_OUT_FILE} ${OUT_CONTENT})
     set(ZLIB_CONF_WRITTEN
         TRUE
         CACHE BOOL "zconf.h.cmakein was created")
     mark_as_advanced(ZLIB_CONF_WRITTEN)
-endif(NOT ZLIB_CONF_WRITTEN)
+endif()
 
 #
 # Check to see if we have large file support
@@ -98,9 +98,9 @@ check_include_file(unistd.h HAVE_UNISTD_H)
 #
 if(MSVC)
     set(CMAKE_REQUIRED_FLAGS "-WX")
-else(MSVC)
+else()
     set(CMAKE_REQUIRED_FLAGS "-Werror")
-endif(MSVC)
+endif()
 
 check_c_source_compiles(
     "
@@ -152,7 +152,7 @@ set(ZLIB_SRCS
 if(WIN32)
     set(zlib_static_suffix "s")
     set(CMAKE_DEBUG_POSTFIX "d")
-endif(WIN32)
+endif()
 
 if(ZLIB_BUILD_SHARED)
     add_library(
@@ -177,7 +177,7 @@ if(ZLIB_BUILD_SHARED)
     if(NOT CYGWIN)
         set_target_properties(zlib PROPERTIES SOVERSION ${zlib_VERSION_MAJOR}
                                               VERSION ${INSTALL_VERSION})
-    endif(NOT CYGWIN)
+    endif()
 
     set_target_properties(
         zlib
@@ -193,12 +193,8 @@ if(ZLIB_BUILD_SHARED)
             zlib
             PROPERTIES LINK_FLAGS
                        "-Wl,--version-script,\"${zlib_SOURCE_DIR}/zlib.map\"")
-    endif(
-        UNIX
-        AND NOT APPLE
-        AND NOT (CMAKE_SYSTEM_NAME STREQUAL AIX)
-        AND NOT (CMAKE_SYSTEM_NAME STREQUAL SunOS))
-endif(ZLIB_BUILD_SHARED)
+    endif()
+endif()
 
 if(ZLIB_BUILD_STATIC)
     add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_PUBLIC_HDRS}
@@ -220,7 +216,7 @@ if(ZLIB_BUILD_STATIC)
     set_target_properties(
         zlibstatic PROPERTIES EXPORT_NAME ZLIBSTATIC OUTPUT_NAME
                                                      z${zlib_static_suffix})
-endif(ZLIB_BUILD_STATIC)
+endif()
 
 if(ZLIB_INSTALL)
     if(ZLIB_BUILD_SHARED)
@@ -244,8 +240,8 @@ if(ZLIB_INSTALL)
                 DESTINATION ${CMAKE_INSTALL_BINDIR}
                 CONFIGURATIONS Debug OR RelWithDebInfo
                 OPTIONAL)
-        endif(MSVC)
-    endif(ZLIB_BUILD_SHARED)
+        endif()
+    endif()
 
     if(ZLIB_BUILD_STATIC)
         install(
@@ -260,7 +256,7 @@ if(ZLIB_INSTALL)
             FILE ZLIB-static.cmake
             NAMESPACE ZLIB::
             DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/zlib)
-    endif(ZLIB_BUILD_STATIC)
+    endif()
 
     configure_package_config_file(
         ${zlib_SOURCE_DIR}/zlibConfig.cmake.in
@@ -297,7 +293,7 @@ if(ZLIB_INSTALL)
         FILES ${ZLIB_PC}
         COMPONENT Development
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
-endif(ZLIB_INSTALL)
+endif()
 
 # ============================================================================
 # Tests
@@ -305,6 +301,6 @@ endif(ZLIB_INSTALL)
 if(ZLIB_BUILD_TESTING)
     enable_testing()
     add_subdirectory(test)
-endif(ZLIB_BUILD_TESTING)
+endif()
 
 add_subdirectory(contrib)
