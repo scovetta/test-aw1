@@ -491,6 +491,82 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateBound(): verify the returned upper bound is never exceeded
+ * by the actual compressed output for a variety of inputs and levels.
+ */
+static void test_deflate_bound(Byte *compr, uLong comprLen) {
+    z_stream c_stream;
+    int err;
+    int level;
+    /* Test inputs: empty, short text, and a block of zeros (highly compressible) */
+    static const struct {
+        const char *data;
+        uLong       len;
+        const char *desc;
+    } inputs[] = {
+        { "",        0,                                  "empty" },
+        { hello,     sizeof(hello),                      "hello string" },
+        { NULL,      1024,                               "1024 zero bytes" },
+    };
+    int i;
+    Byte zeros[1024];
+
+    memset(zeros, 0, sizeof(zeros));
+
+    for (level = Z_NO_COMPRESSION; level <= Z_BEST_COMPRESSION; level++) {
+        for (i = 0; i < 3; i++) {
+            const Byte *src = (i == 2) ? zeros
+                                       : (const Byte *)inputs[i].data;
+            uLong srcLen    = (i == 2) ? 1024 : inputs[i].len;
+            uLong bound;
+
+            c_stream.zalloc = zalloc;
+            c_stream.zfree  = zfree;
+            c_stream.opaque = (voidpf)0;
+
+            err = deflateInit(&c_stream, level);
+            CHECK_ERR(err, "deflateInit");
+
+            /* deflateBound() must be called after deflateInit() for a tight
+             * bound; the stream parameters (window size, strategy) affect it. */
+            bound = deflateBound(&c_stream, srcLen);
+
+            if (bound < srcLen) {
+                /* The bound must be >= the source length in the worst case */
+                fprintf(stderr,
+                        "deflateBound FAILED: bound (%lu) < srcLen (%lu)\n",
+                        bound, srcLen);
+                exit(1);
+            }
+
+            c_stream.next_in  = (z_const Bytef *)src;
+            c_stream.avail_in = (uInt)srcLen;
+            c_stream.next_out = compr;
+            c_stream.avail_out = (uInt)comprLen;
+
+            err = deflate(&c_stream, Z_FINISH);
+            if (err != Z_STREAM_END) {
+                fprintf(stderr, "deflate (deflateBound test) should report Z_STREAM_END\n");
+                exit(1);
+            }
+            err = deflateEnd(&c_stream);
+            CHECK_ERR(err, "deflateEnd");
+
+            /* The core guarantee: actual output must not exceed the bound */
+            if (c_stream.total_out > bound) {
+                fprintf(stderr,
+                        "deflateBound FAILED for level=%d input=%s: "
+                        "actual=%lu > bound=%lu\n",
+                        level, inputs[i].desc,
+                        c_stream.total_out, bound);
+                exit(1);
+            }
+        }
+    }
+    printf("deflateBound(): upper-bound guarantee verified for all levels and inputs\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +620,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_deflate_bound(compr, comprLen);
 
     free(compr);
     free(uncompr);
