@@ -1,6 +1,8 @@
 ---
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: "0 8 * * *"    # Daily at 8:00 UTC (2 hours after workers start)
+  workflow_dispatch:        # Manual trigger for testing
 
 permissions: read-all
 

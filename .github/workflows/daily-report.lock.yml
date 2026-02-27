@@ -22,10 +22,12 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"11ba9479dfd334ad409ad48832c91765f8f2568396b97a08df937ad882b0a042","compiler_version":"v0.50.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"cf0ff84187195492bbee23ff47e0f930192eda2e558fa27f7b118ea8759a9ba6","compiler_version":"v0.50.5"}
 
 name: "Daily Report Agent"
 "on":
+  schedule:
+  - cron: "0 8 * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -212,6 +214,8 @@ jobs:
     needs: activation
     runs-on: ubuntu-latest
     permissions: read-all
+    concurrency:
+      group: "gh-aw-copilot-${{ github.workflow }}"
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""

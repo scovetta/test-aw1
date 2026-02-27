@@ -11,8 +11,8 @@ tools:
 
 safe-outputs:
   dispatch-workflow:
-    workflows: [security-auditor, test-guardian, code-maintainer, daily-report]
-    max: 4
+    workflows: [security-auditor, test-guardian, code-maintainer]
+    max: 3
   create-issue:
     title-prefix: "[pm-daily] "
     labels: [automation, pm-orchestrator]
@@ -46,11 +46,12 @@ Each day, perform the following orchestration:
 
 1. **Check repository state**: Read recent commits, open issues, open PRs, and any previous daily reports (search for issues with `[pm-daily]` prefix).
 2. **Review cache memory** for state from previous runs at `/tmp/gh-aw/cache-memory/`.
-3. **Dispatch worker agents** in this order:
+3. **Dispatch worker agents**:
    - `security-auditor` — Scan for security vulnerabilities in C source files
    - `test-guardian` — Analyze test coverage and propose improvements
    - `code-maintainer` — Identify cleanup, documentation, and quality improvements
-4. **After dispatching workers**, dispatch the `daily-report` workflow to consolidate findings.
+
+   Note: The `daily-report` workflow runs on its own delayed schedule (8:00 UTC) to consolidate findings after workers complete.
 5. **Create a daily status issue** summarizing:
    - What workers were dispatched and why
    - Repository health overview (open issues, recent activity, pending PRs)
