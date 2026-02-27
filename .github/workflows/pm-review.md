@@ -10,6 +10,8 @@ safe-outputs:
     max: 10
   submit-pull-request-review:
     max: 1
+  mark-pull-request-as-ready-for-review:
+    max: 3
   add-labels:
     allowed: [approved, needs-changes, needs-human-review, security-sensitive, api-change]
     max: 3
@@ -70,16 +72,19 @@ For each changed file, verify:
 **For safe changes (docs, tests, cosmetic):**
 - Add inline comments on any issues
 - Submit review as APPROVE with summary
+- If the PR is a draft and you APPROVE it, also call `mark-pull-request-as-ready-for-review` to promote it — this signals to humans that it's been reviewed and is safe to merge
 
 **For library code changes:**
 - Add detailed inline comments on each concern
 - Submit review as COMMENT (never APPROVE library changes — that requires human review)
 - Label with `needs-human-review`
+- Do NOT mark as ready for review
 
 **For problematic changes:**
 - Add inline comments explaining each issue
 - Submit review as REQUEST_CHANGES
 - Label with `needs-changes`
+- Do NOT mark as ready for review
 
 ## Review Comment Style
 
@@ -101,12 +106,13 @@ If the PR was created by an agent, check the title prefix to identify the source
 
 For all agent-generated PRs:
 - Verify changes match the PR description
+- **Verify the PR is self-contained and minimal** — it should address exactly ONE logical change. If a PR bundles multiple unrelated changes (e.g., a typo fix + a build config change + a test addition), REQUEST_CHANGES and ask the author to split it into separate PRs.
 - Ensure no scope creep (e.g., a "cleanup" PR shouldn't change behavior)
-- **APPROVE** documentation, test, and cosmetic-only changes after verifying correctness
-- **APPROVE** build system fixes that don't affect compiled output
-- **APPROVE** dependency version pin updates (GitHub Actions SHA pins, CMake version bumps)
+- **APPROVE** documentation, test, and cosmetic-only changes after verifying correctness — then mark as ready for review
+- **APPROVE** build system fixes that don't affect compiled output — then mark as ready for review
+- **APPROVE** dependency version pin updates (GitHub Actions SHA pins, CMake version bumps) — then mark as ready for review
 - **COMMENT** with `needs-human-review` for any changes touching library source code
-- **REQUEST_CHANGES** if the PR introduces behavioral changes or scope creep
+- **REQUEST_CHANGES** if the PR introduces behavioral changes, scope creep, or bundles multiple unrelated changes
 
 ### External PRs
 If the PR is from an external contributor:

@@ -77,9 +77,10 @@ Create an issue documenting:
 ### Propose Test Improvements
 If you identify a clear, self-contained test improvement, create a **draft PR** with:
 - New test cases added to `test/example.c` or a new test file
-- Focus on ONE improvement per PR — keep changes small and reviewable
+- **ONE improvement per PR** — each PR must address exactly one test gap or one related group of test cases for a single API function. Never bundle unrelated test additions into the same PR.
 - Include comments explaining what each test case validates
 - Ensure the test compiles with the existing CMake build system
+- The PM Review agent will review your PR and mark it ready for review if approved
 
 ## Quality Standards for New Tests
 

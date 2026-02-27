@@ -76,10 +76,12 @@ zlib itself has **zero runtime dependencies** (it's a self-contained C library).
 
 ### 3. GitHub Actions Audit
 - Check all `.yml` workflow files in `.github/workflows/`
-- Verify action versions are pinned to SHA or latest major version
+- **Prefer pinning actions to full commit SHA hashes** (e.g., `actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29`) rather than tags or branch names
+- When pinning to a SHA, add an inline comment with the corresponding tag for readability (e.g., `actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.1`)
+- Flag any actions using `@v4`, `@v3`, or other tag-only references — these should be converted to full SHA pins
+- Flag any actions using `@master` or `@main` — these are especially dangerous and must be pinned immediately
 - Check for deprecated actions
 - Verify runner image versions are current
-- Flag any actions using `@master` or `@main` (should use tagged versions)
 
 ### 4. Contributed Code Review
 - Check Visual Studio project files for VS version compatibility
@@ -106,11 +108,13 @@ Create a `[dependencies]` issue documenting:
 - Recommended updates prioritized by impact
 
 ### Propose Updates
-For safe, clear updates, create a **draft PR**:
+For safe, clear updates, create a **draft PR** addressing **exactly ONE category of update**:
+- Pin GitHub Actions to full commit SHA hashes (with tag comments for readability)
 - Update CMake minimum version
-- Pin GitHub Actions to specific SHA versions
 - Update Bazel module dependencies
 - Fix broken documentation links
+
+**Each PR must be self-contained and minimal.** Never combine unrelated dependency updates into a single PR — e.g., don't mix GitHub Actions SHA pins with CMake version bumps. Each change should be independently reviewable and revertable. The PM Review agent will review your PR and mark it ready for review if approved.
 
 ### Assign Complex Updates
 For updates requiring code changes, create an issue with instructions and assign to Copilot:

@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"92b05a8e68fab266cfba944c088b28473e9131578dd23d34ef90edfba16848a8","compiler_version":"v0.50.5"}
+# gh-aw-metadata: {"schema_version":"v1","frontmatter_hash":"1f1696f2a47d9cd81640cb4c54a56abf8d80744f01f7f7cc4537c9d593307c13","compiler_version":"v0.50.5"}
 
 name: "Product Manager Review Agent"
 "on":
@@ -123,7 +123,7 @@ jobs:
           cat "/opt/gh-aw/prompts/safe_outputs_prompt.md"
           cat << 'GH_AW_PROMPT_EOF'
           <safe-output-tools>
-          Tools: add_comment, create_pull_request_review_comment, submit_pull_request_review, add_labels, missing_tool, missing_data
+          Tools: add_comment, mark_pull_request_as_ready_for_review, create_pull_request_review_comment, submit_pull_request_review, add_labels, missing_tool, missing_data
           </safe-output-tools>
           <github-context>
           The following GitHub context information is available for this workflow:
@@ -348,7 +348,7 @@ jobs:
           mkdir -p /tmp/gh-aw/safeoutputs
           mkdir -p /tmp/gh-aw/mcp-logs/safeoutputs
           cat > /opt/gh-aw/safeoutputs/config.json << 'GH_AW_SAFE_OUTPUTS_CONFIG_EOF'
-          {"add_comment":{"max":1},"add_labels":{"allowed":["approved","needs-changes","needs-human-review","security-sensitive","api-change"],"max":3},"create_pull_request_review_comment":{"max":10},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit_pull_request_review":{"max":1}}
+          {"add_comment":{"max":1},"add_labels":{"allowed":["approved","needs-changes","needs-human-review","security-sensitive","api-change"],"max":3},"create_pull_request_review_comment":{"max":10},"mark_pull_request_as_ready_for_review":{"max":3},"missing_data":{},"missing_tool":{},"noop":{"max":1},"submit_pull_request_review":{"max":1}}
           GH_AW_SAFE_OUTPUTS_CONFIG_EOF
           cat > /opt/gh-aw/safeoutputs/tools.json << 'GH_AW_SAFE_OUTPUTS_TOOLS_EOF'
           [
@@ -530,6 +530,30 @@ jobs:
                 "type": "object"
               },
               "name": "missing_data"
+            },
+            {
+              "description": "Mark a draft pull request as ready for review by setting draft=false and adding a comment. Use this when a draft PR has reached a state where it's ready for team review. The comment should explain what was completed and why the PR is now ready.",
+              "inputSchema": {
+                "additionalProperties": false,
+                "properties": {
+                  "pull_request_number": {
+                    "description": "Pull request number to mark as ready. This is the numeric ID from the GitHub URL (e.g., 432 in github.com/owner/repo/pull/432). If omitted, marks the PR that triggered this workflow (requires a pull_request event trigger).",
+                    "type": [
+                      "number",
+                      "string"
+                    ]
+                  },
+                  "reason": {
+                    "description": "Comment explaining why the PR is ready for review (e.g., 'All tests passing and documentation updated', 'Feature implementation complete and ready for feedback').",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "name": "mark_pull_request_as_ready_for_review"
             }
           ]
           GH_AW_SAFE_OUTPUTS_TOOLS_EOF
@@ -605,6 +629,24 @@ jobs:
                 }
               },
               "customValidation": "startLineLessOrEqualLine"
+            },
+            "mark_pull_request_as_ready_for_review": {
+              "defaultMax": 1,
+              "fields": {
+                "pull_request_number": {
+                  "issueOrPRNumber": true
+                },
+                "reason": {
+                  "required": true,
+                  "type": "string",
+                  "sanitize": true,
+                  "maxLength": 65000
+                },
+                "repo": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              }
             },
             "missing_data": {
               "defaultMax": 20,
@@ -1231,7 +1273,7 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           GH_AW_AGENT_OUTPUT: ${{ env.GH_AW_AGENT_OUTPUT }}
-          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1},\"add_labels\":{\"allowed\":[\"approved\",\"needs-changes\",\"needs-human-review\",\"security-sensitive\",\"api-change\"],\"max\":3},\"create_pull_request_review_comment\":{\"max\":10,\"side\":\"RIGHT\"},\"missing_data\":{},\"missing_tool\":{},\"submit_pull_request_review\":{\"max\":1}}"
+          GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: "{\"add_comment\":{\"max\":1},\"add_labels\":{\"allowed\":[\"approved\",\"needs-changes\",\"needs-human-review\",\"security-sensitive\",\"api-change\"],\"max\":3},\"create_pull_request_review_comment\":{\"max\":10,\"side\":\"RIGHT\"},\"mark_pull_request_as_ready_for_review\":{\"max\":3},\"missing_data\":{},\"missing_tool\":{},\"submit_pull_request_review\":{\"max\":1}}"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |

@@ -89,9 +89,10 @@ Create an issue documenting:
 
 ### Propose Fixes
 For clear, low-risk improvements, create a **draft PR** with:
-- ONE focused change (e.g., fix typos in README, update INDEX file, fix a warning)
+- **ONE focused change per PR** — e.g., fix typos in README, OR update INDEX file, OR fix a warning. Never bundle multiple unrelated fixes into a single PR, even if they are all low-risk. Each PR should be independently reviewable and mergeable.
 - Clear explanation of what changed and why
 - No behavioral changes to the library — cosmetic and documentation only
+- The PM Review agent will review your PR and mark it ready for review if approved
 
 ## Change Safety Rules
 

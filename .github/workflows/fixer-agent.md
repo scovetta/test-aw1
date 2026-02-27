@@ -79,10 +79,14 @@ When assigning an issue to Copilot, add a comment with clear instructions:
 - Do not modify `zlib.h` or `zconf.h` public API
 - Do not change compression/decompression behavior
 - Do not add external dependencies
+- Do not bundle multiple unrelated fixes into a single PR
 **Testing**: [how to verify the fix — build command, test to run]
+**PR scope**: This PR must address ONLY this issue. Do not include unrelated changes.
 ```
 
 Then assign the issue to Copilot using `assign-to-agent`.
+
+**Important**: Assign each issue separately. Never group multiple unrelated issues into a single Copilot assignment — each issue should result in its own focused PR.
 
 ### 4. Label Management
 

@@ -101,12 +101,14 @@ Create a `[build]` issue documenting:
 - Platform-specific build issues
 
 ### Propose Improvements
-For clear build system fixes, create a **draft PR**:
+For clear build system fixes, create a **draft PR** addressing **exactly ONE issue**:
 - Fix version synchronization issues
 - Update deprecated CMake patterns
 - Add missing source files to build lists
 - Fix `INDEX` file to match actual contents
 - Improve build documentation
+
+**Each PR must be self-contained and minimal.** Never combine unrelated build fixes into a single PR — e.g., don't mix a CMake deprecation fix with an INDEX file update. Each change should be independently reviewable. The PM Review agent will review your PR and mark it ready for review if approved.
 
 ## Safety Rules
 
