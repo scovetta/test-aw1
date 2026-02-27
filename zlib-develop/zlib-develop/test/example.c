@@ -491,6 +491,45 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test crc32() and adler32() checksum functions
+ */
+static void test_checksums(void) {
+    const Bytef *data = (const Bytef *)hello;
+    uInt len = (uInt)strlen(hello);
+    uLong crc, adler;
+
+    /* crc32: compute initial value, then checksum over hello */
+    crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, data, len);
+
+    /* verify that incremental crc32 matches one-shot crc32 */
+    {
+        uLong crc1 = crc32(crc32(0L, Z_NULL, 0), data, len / 2);
+        crc1 = crc32(crc1, data + len / 2, len - len / 2);
+        if (crc1 != crc) {
+            fprintf(stderr, "crc32 incremental vs one-shot mismatch\n");
+            exit(1);
+        }
+    }
+
+    /* adler32: compute initial value, then checksum over hello */
+    adler = adler32(0L, Z_NULL, 0);
+    adler = adler32(adler, data, len);
+
+    /* verify that incremental adler32 matches one-shot adler32 */
+    {
+        uLong a1 = adler32(adler32(0L, Z_NULL, 0), data, len / 2);
+        a1 = adler32(a1, data + len / 2, len - len / 2);
+        if (a1 != adler) {
+            fprintf(stderr, "adler32 incremental vs one-shot mismatch\n");
+            exit(1);
+        }
+    }
+
+    printf("checksums(): crc32=0x%08lx adler32=0x%08lx\n", crc, adler);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +583,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_checksums();
 
     free(compr);
     free(uncompr);
