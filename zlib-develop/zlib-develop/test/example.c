@@ -409,6 +409,59 @@ static void test_sync(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test adler32_combine(), crc32_combine(), and crc32_combine_gen/op().
+ * Validates that combining partial checksums equals the checksum of the full
+ * concatenated input — the key property used in parallel/streaming workflows.
+ */
+static void test_checksum_combine(void) {
+    static const char part1[] = "hello, ";
+    static const char part2[] = "hello!";
+    char full[32];
+    int len1 = (int)strlen(part1);
+    int len2 = (int)strlen(part2);
+    uLong adler_full, adler1, adler2, adler_combined;
+    uLong crc_full, crc1, crc2, crc_combined, op;
+
+    strcpy(full, part1);
+    strcat(full, part2);
+
+    /* adler32_combine: combine two partial adler32 checksums */
+    adler_full     = adler32(0L, (const Bytef *)full,  (uInt)(len1 + len2));
+    adler1         = adler32(0L, (const Bytef *)part1, (uInt)len1);
+    adler2         = adler32(0L, (const Bytef *)part2, (uInt)len2);
+    adler_combined = adler32_combine(adler1, adler2, (z_off_t)len2);
+    if (adler_combined != adler_full) {
+        fprintf(stderr, "adler32_combine error: %lx != %lx\n",
+                adler_combined, adler_full);
+        exit(1);
+    }
+    printf("adler32_combine(): OK\n");
+
+    /* crc32_combine: combine two partial crc32 checksums */
+    crc_full     = crc32(0L, (const Bytef *)full,  (uInt)(len1 + len2));
+    crc1         = crc32(0L, (const Bytef *)part1, (uInt)len1);
+    crc2         = crc32(0L, (const Bytef *)part2, (uInt)len2);
+    crc_combined = crc32_combine(crc1, crc2, (z_off_t)len2);
+    if (crc_combined != crc_full) {
+        fprintf(stderr, "crc32_combine error: %lx != %lx\n",
+                crc_combined, crc_full);
+        exit(1);
+    }
+    printf("crc32_combine(): OK\n");
+
+    /* crc32_combine_gen + crc32_combine_op: pre-generate the combine operator
+     * for reuse when the second-segment length is fixed (e.g. chunk-based I/O) */
+    op           = crc32_combine_gen((z_off_t)len2);
+    crc_combined = crc32_combine_op(crc1, crc2, op);
+    if (crc_combined != crc_full) {
+        fprintf(stderr, "crc32_combine_op error: %lx != %lx\n",
+                crc_combined, crc_full);
+        exit(1);
+    }
+    printf("crc32_combine_op(): OK\n");
+}
+
+/* ===========================================================================
  * Test deflate() with preset dictionary
  */
 static void test_dict_deflate(Byte *compr, uLong comprLen) {
@@ -544,6 +597,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_checksum_combine();
 
     free(compr);
     free(uncompr);
