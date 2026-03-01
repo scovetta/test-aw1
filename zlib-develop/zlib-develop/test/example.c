@@ -164,6 +164,120 @@ static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
 #endif
 }
 
+/* ===========================================================================
+ * Test gzwrite(), gzflush(), gzrewind(), gzeof(), gzdirect(), gzoffset()
+ */
+#ifndef Z_SOLO
+static void test_gzio2(const char *fname) {
+#ifdef NO_GZCOMPRESS
+    fprintf(stderr, "NO_GZCOMPRESS -- gz* functions cannot compress\n");
+#else
+    gzFile file;
+    int err;
+    char buf[64];
+    z_off_t offset;
+    const char *msg = "hello, world!\n";
+    int len = (int)strlen(msg);
+
+    /* --- Write side --- */
+    file = gzopen(fname, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error in test_gzio2\n");
+        exit(1);
+    }
+
+    /* gzdirect() must return 0 when writing compressed output */
+    if (gzdirect(file) != 0) {
+        fprintf(stderr, "gzdirect should be 0 for compressed write\n");
+        exit(1);
+    }
+
+    /* gzwrite() must return the number of uncompressed bytes written */
+    if (gzwrite(file, msg, (unsigned)len) != len) {
+        fprintf(stderr, "gzwrite err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+
+    /* gzflush() must succeed with Z_SYNC_FLUSH */
+    if (gzflush(file, Z_SYNC_FLUSH) != Z_OK) {
+        fprintf(stderr, "gzflush err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+
+    /* gzoffset() must return a positive compressed offset after writing */
+    offset = gzoffset(file);
+    if (offset <= 0) {
+        fprintf(stderr, "gzoffset error after write: %ld\n", (long)offset);
+        exit(1);
+    }
+
+    gzclose(file);
+
+    /* --- Read side --- */
+    file = gzopen(fname, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error in test_gzio2 (read)\n");
+        exit(1);
+    }
+
+    /* Before any read, gzeof() must be 0 */
+    if (gzeof(file)) {
+        fprintf(stderr, "gzeof should be 0 at start of file\n");
+        exit(1);
+    }
+
+    /* gzdirect() must return 0: the file is gzip-compressed, not transparent */
+    if (gzdirect(file) != 0) {
+        fprintf(stderr, "gzdirect should be 0 for gzip file\n");
+        exit(1);
+    }
+
+    /* gzread() must return all bytes and match original */
+    if (gzread(file, buf, sizeof(buf) - 1) != len) {
+        fprintf(stderr, "gzread err in test_gzio2: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+    buf[len] = '\0';
+    if (strcmp(buf, msg) != 0) {
+        fprintf(stderr, "bad gzread in test_gzio2: %s\n", buf);
+        exit(1);
+    }
+
+    /* After reading all data, gzeof() must return non-zero */
+    {
+        char tmp[1];
+        gzread(file, tmp, 1); /* trigger EOF */
+    }
+    if (!gzeof(file)) {
+        fprintf(stderr, "gzeof should be 1 at end of file\n");
+        exit(1);
+    }
+
+    /* gzrewind() must reposition to the start of the file */
+    if (gzrewind(file) != 0) {
+        fprintf(stderr, "gzrewind error\n");
+        exit(1);
+    }
+
+    /* After rewind, gzeof() must be 0 again */
+    if (gzeof(file)) {
+        fprintf(stderr, "gzeof should be 0 after gzrewind\n");
+        exit(1);
+    }
+
+    /* gzoffset() at start after rewind must be small (just past gzip header) */
+    offset = gzoffset(file);
+    if (offset < 0) {
+        fprintf(stderr, "gzoffset error after gzrewind: %ld\n", (long)offset);
+        exit(1);
+    }
+
+    gzclose(file);
+    printf("gzwrite/gzflush/gzrewind/gzeof/gzdirect/gzoffset(): OK\n");
+#endif /* NO_GZCOMPRESS */
+}
+#endif /* !Z_SOLO */
+
 #endif /* Z_SOLO */
 
 /* ===========================================================================
@@ -530,6 +644,8 @@ int main(int argc, char *argv[]) {
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
+
+    test_gzio2(argc > 1 ? argv[1] : TESTFILE);
 #endif
 
     test_deflate(compr, comprLen);
