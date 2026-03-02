@@ -5,13 +5,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Build Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@031b7912c013a3288588fa1583accbf30134e513  # master as of 2026-02-26; no tagged releases available
       with:
         oss-fuzz-project-name: 'zlib'
         dry-run: false
 
     - name: Run Fuzzers
-      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@031b7912c013a3288588fa1583accbf30134e513  # master as of 2026-02-26; no tagged releases available
       with:
         oss-fuzz-project-name: 'zlib'
         fuzz-seconds: 300
