@@ -491,6 +491,129 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateGetDictionary() and inflateGetDictionary()
+ */
+static void test_get_dictionary(Byte *compr, uLong comprLen, Byte *uncompr,
+                                uLong uncomprLen) {
+    z_stream c_stream; /* compression stream */
+    z_stream d_stream; /* decompression stream */
+    int err;
+    Bytef retrieved[256];
+    uInt retrieved_len;
+    uLong dict_compr_len;
+
+    /* --- Test deflateGetDictionary --- */
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_BEST_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    err = deflateSetDictionary(&c_stream,
+                (const Bytef*)dictionary, (int)sizeof(dictionary));
+    CHECK_ERR(err, "deflateSetDictionary");
+
+    /* Retrieve the dictionary and verify it matches what was set */
+    retrieved_len = 0;
+    err = deflateGetDictionary(&c_stream, retrieved, &retrieved_len);
+    CHECK_ERR(err, "deflateGetDictionary");
+
+    if (retrieved_len != (uInt)sizeof(dictionary) ||
+        memcmp(retrieved, dictionary, sizeof(dictionary)) != 0) {
+        fprintf(stderr, "deflateGetDictionary: dictionary content mismatch\n");
+        exit(1);
+    }
+
+    /* Verify that passing NULL buffer still returns the length */
+    retrieved_len = 0;
+    err = deflateGetDictionary(&c_stream, Z_NULL, &retrieved_len);
+    CHECK_ERR(err, "deflateGetDictionary NULL buf");
+
+    if (retrieved_len != (uInt)sizeof(dictionary)) {
+        fprintf(stderr, "deflateGetDictionary: length mismatch with NULL buf\n");
+        exit(1);
+    }
+
+    /* Compress hello using the dictionary */
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+    c_stream.next_in = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)strlen(hello) + 1;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+    dict_compr_len = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* --- Test inflateGetDictionary --- */
+
+    strcpy((char*)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)dict_compr_len;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    for (;;) {
+        err = inflate(&d_stream, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        if (err == Z_NEED_DICT) {
+            err = inflateSetDictionary(&d_stream, (const Bytef*)dictionary,
+                                       (int)sizeof(dictionary));
+            CHECK_ERR(err, "inflateSetDictionary");
+        } else {
+            CHECK_ERR(err, "inflate with dict");
+        }
+    }
+
+    /* After successful inflation with a dictionary, verify retrieval */
+    retrieved_len = 0;
+    err = inflateGetDictionary(&d_stream, retrieved, &retrieved_len);
+    CHECK_ERR(err, "inflateGetDictionary");
+
+    if (retrieved_len == 0) {
+        fprintf(stderr, "inflateGetDictionary: returned zero-length dictionary\n");
+        exit(1);
+    }
+
+    /* Verify NULL buffer variant returns length without copying */
+    {
+        uInt len_only = 0;
+        err = inflateGetDictionary(&d_stream, Z_NULL, &len_only);
+        CHECK_ERR(err, "inflateGetDictionary NULL buf");
+        if (len_only != retrieved_len) {
+            fprintf(stderr, "inflateGetDictionary: length mismatch with NULL buf\n");
+            exit(1);
+        }
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad inflate with dict (get_dictionary test)\n");
+        exit(1);
+    } else {
+        printf("deflateGetDictionary() and inflateGetDictionary(): OK\n");
+    }
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +667,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+    comprLen = 3 * uncomprLen;
+
+    test_get_dictionary(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
