@@ -491,6 +491,98 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateBound(): verify the bound is never exceeded for all compression
+ * levels (0-9) and for both empty and non-empty inputs.
+ */
+static void test_deflate_bound(Byte *compr, uLong comprLen) {
+    z_stream c_stream;
+    int err;
+    int level;
+    uLong sourceLen;
+    uLong bound;
+    uLong actual;
+
+    /* Test with the hello string across all compression levels */
+    sourceLen = (uLong)strlen(hello) + 1;
+
+    for (level = 0; level <= 9; level++) {
+        c_stream.zalloc = zalloc;
+        c_stream.zfree = zfree;
+        c_stream.opaque = (voidpf)0;
+
+        err = deflateInit(&c_stream, level);
+        CHECK_ERR(err, "deflateInit");
+
+        /* deflateBound must be called after deflateInit */
+        bound = deflateBound(&c_stream, sourceLen);
+        if (bound == 0) {
+            fprintf(stderr, "deflateBound returned 0 for level %d\n", level);
+            exit(1);
+        }
+
+        c_stream.next_in  = (z_const unsigned char *)hello;
+        c_stream.avail_in = (uInt)sourceLen;
+        c_stream.next_out = compr;
+        c_stream.avail_out = (uInt)comprLen;
+
+        /* Single-pass compression with Z_FINISH */
+        err = deflate(&c_stream, Z_FINISH);
+        if (err != Z_STREAM_END) {
+            fprintf(stderr, "deflate Z_FINISH error: %d (level %d)\n",
+                    err, level);
+            exit(1);
+        }
+
+        actual = c_stream.total_out;
+
+        err = deflateEnd(&c_stream);
+        CHECK_ERR(err, "deflateEnd");
+
+        /* The actual compressed size must not exceed the bound */
+        if (actual > bound) {
+            fprintf(stderr,
+                    "deflateBound violated at level %d: bound=%lu actual=%lu\n",
+                    level, bound, actual);
+            exit(1);
+        }
+    }
+    printf("deflateBound(): OK (all levels 0-9, bound always respected)\n");
+
+    /* Test with empty input */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    bound = deflateBound(&c_stream, 0);
+
+    c_stream.next_in  = (z_const unsigned char *)hello; /* won't be read */
+    c_stream.avail_in = 0;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate Z_FINISH (empty) error: %d\n", err);
+        exit(1);
+    }
+    actual = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    if (actual > bound) {
+        fprintf(stderr,
+                "deflateBound violated for empty input: bound=%lu actual=%lu\n",
+                bound, actual);
+        exit(1);
+    }
+    printf("deflateBound(): OK (empty input)\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +636,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_deflate_bound(compr, comprLen);
 
     free(compr);
     free(uncompr);
