@@ -85,6 +85,53 @@ static void test_compress(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test adler32_combine(), crc32_combine(), crc32_combine_gen(), and
+ * crc32_combine_op(). Verifies that combining checksums computed over
+ * separate parts matches the checksum computed over the whole input.
+ */
+static void test_checksum_combine(void) {
+    static const char part1[] = "hello, ";
+    static const char part2[] = "hello!";
+    static const char whole[] = "hello, hello!";
+    uLong len1 = (uLong)strlen(part1);
+    uLong len2 = (uLong)strlen(part2);
+
+    /* Test adler32_combine: adler32(part1) + adler32(part2) == adler32(whole) */
+    uLong adler_part1 = adler32(0L, (const Bytef *)part1, (uInt)len1);
+    uLong adler_part2 = adler32(0L, (const Bytef *)part2, (uInt)len2);
+    uLong adler_whole = adler32(0L, (const Bytef *)whole, (uInt)strlen(whole));
+    uLong adler_combined = adler32_combine(adler_part1, adler_part2, (z_off_t)len2);
+    if (adler_combined != adler_whole) {
+        fprintf(stderr, "adler32_combine error: 0x%lx != 0x%lx\n",
+                adler_combined, adler_whole);
+        exit(1);
+    }
+    printf("adler32_combine(): OK\n");
+
+    /* Test crc32_combine: crc32(part1) + crc32(part2) == crc32(whole) */
+    uLong crc_part1 = crc32(0L, (const Bytef *)part1, (uInt)len1);
+    uLong crc_part2 = crc32(0L, (const Bytef *)part2, (uInt)len2);
+    uLong crc_whole = crc32(0L, (const Bytef *)whole, (uInt)strlen(whole));
+    uLong crc_combined = crc32_combine(crc_part1, crc_part2, (z_off_t)len2);
+    if (crc_combined != crc_whole) {
+        fprintf(stderr, "crc32_combine error: 0x%lx != 0x%lx\n",
+                crc_combined, crc_whole);
+        exit(1);
+    }
+    printf("crc32_combine(): OK\n");
+
+    /* Test crc32_combine_gen + crc32_combine_op: must equal crc32_combine */
+    uLong op = crc32_combine_gen((z_off_t)len2);
+    uLong crc_via_op = crc32_combine_op(crc_part1, crc_part2, op);
+    if (crc_via_op != crc_whole) {
+        fprintf(stderr, "crc32_combine_op error: 0x%lx != 0x%lx\n",
+                crc_via_op, crc_whole);
+        exit(1);
+    }
+    printf("crc32_combine_gen/op(): OK\n");
+}
+
+/* ===========================================================================
  * Test read/write of .gz files
  */
 static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
@@ -530,6 +577,8 @@ int main(int argc, char *argv[]) {
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
+
+    test_checksum_combine();
 #endif
 
     test_deflate(compr, comprLen);
