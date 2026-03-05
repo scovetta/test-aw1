@@ -52,6 +52,14 @@ crc32vx/      by Ilya Leoshkevich <iii@linux.ibm.com>
 testzlib/   by Gilles Vollant <info@winimage.com>
         Example of the use of zlib
 
+nuget/      by Jean-loup Gailly and Mark Adler
+        NuGet package for consuming native builds of zlib in .NET.
+        Publishes madler.zlib.redist packages for Windows, Linux, and macOS.
+
+vstudio/    Instructions for building zlib with Visual Studio using cmake.
+        The pre-made Visual Studio projects have been removed; use cmake
+        to generate Visual Studio project files on demand.
+
 zlib1-dll/
             by @Vollstrecker on github.com
         Build the legacy zlib1.dll with zlib and minizip.
