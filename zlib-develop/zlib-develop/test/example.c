@@ -85,6 +85,41 @@ static void test_compress(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test uncompress2(), which decompresses and reports bytes consumed from source.
+ * Unlike uncompress(), the sourceLen parameter is a pointer and is updated to
+ * reflect the number of bytes actually read from the source buffer.
+ */
+static void test_uncompress2(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    int err;
+    uLong len = (uLong)strlen(hello)+1;
+    uLong sourceLen;
+
+    err = compress(compr, &comprLen, (const Bytef*)hello, len);
+    CHECK_ERR(err, "compress in test_uncompress2");
+
+    strcpy((char*)uncompr, "garbage");
+
+    /* sourceLen is an in/out parameter: pass total available, get bytes used */
+    sourceLen = comprLen;
+    err = uncompress2(uncompr, &uncomprLen, compr, &sourceLen);
+    CHECK_ERR(err, "uncompress2");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress2\n");
+        exit(1);
+    }
+
+    /* Verify sourceLen was updated to reflect the bytes consumed */
+    if (sourceLen != comprLen) {
+        fprintf(stderr, "uncompress2: sourceLen %lu != comprLen %lu\n",
+                sourceLen, comprLen);
+        exit(1);
+    }
+    printf("uncompress2(): %s\n", (char *)uncompr);
+}
+
+/* ===========================================================================
  * Test read/write of .gz files
  */
 static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
@@ -527,6 +562,8 @@ int main(int argc, char *argv[]) {
     (void)argv;
 #else
     test_compress(compr, comprLen, uncompr, uncomprLen);
+
+    test_uncompress2(compr, comprLen, uncompr, uncomprLen);
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
