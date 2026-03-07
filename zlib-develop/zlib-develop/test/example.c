@@ -491,6 +491,126 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateCopy() and inflateCopy()
+ *
+ * Verifies that copying a mid-stream deflate/inflate state produces the same
+ * output as the original stream, and that the copy operates independently.
+ */
+static void test_copy(Byte *compr, uLong comprLen, Byte *uncompr,
+                      uLong uncomprLen) {
+    z_stream c_stream;   /* compression stream */
+    z_stream c_copy;     /* copy of compression stream */
+    z_stream d_stream;   /* decompression stream */
+    z_stream d_copy;     /* copy of decompression stream */
+    int err;
+    uLong len = (uLong)strlen(hello)+1;
+    uLong comprLen2 = comprLen;
+    Byte *compr2;
+
+    compr2 = (Byte*)calloc((uInt)comprLen, 1);
+    if (compr2 == Z_NULL) {
+        fprintf(stderr, "out of memory\n");
+        exit(1);
+    }
+
+    /* --- deflateCopy test --- */
+    /* Initialize a deflate stream with input ready but no output yet */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    /* Copy stream before any data is compressed; both copies start identical */
+    err = deflateCopy(&c_copy, &c_stream);
+    CHECK_ERR(err, "deflateCopy");
+
+    /* Compress with the original stream */
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (original) should report Z_STREAM_END\n");
+        free(compr2);
+        exit(1);
+    }
+    comprLen = c_stream.total_out;
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* Compress with the copied stream; redirect output to a separate buffer */
+    c_copy.next_out = compr2;
+    c_copy.avail_out = (uInt)comprLen2;
+    err = deflate(&c_copy, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (copy) should report Z_STREAM_END\n");
+        free(compr2);
+        exit(1);
+    }
+    comprLen2 = c_copy.total_out;
+    err = deflateEnd(&c_copy);
+    CHECK_ERR(err, "deflateEnd (copy)");
+
+    /* Both compressed outputs must be byte-for-byte identical */
+    if (comprLen != comprLen2 || memcmp(compr, compr2, comprLen) != 0) {
+        fprintf(stderr, "deflateCopy: outputs differ\n");
+        free(compr2);
+        exit(1);
+    }
+    free(compr2);
+
+    /* --- inflateCopy test --- */
+    /* Feed only the 2-byte zlib header to the decompressor, then copy state */
+    strcpy((char*)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+    d_stream.next_in  = compr;
+    d_stream.avail_in = 2; /* only the zlib header */
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    /* Partially decompress (header only) */
+    err = inflate(&d_stream, Z_NO_FLUSH);
+    if (err != Z_OK && err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (partial) error: %d\n", err);
+        exit(1);
+    }
+
+    /* Copy the mid-stream decompressor state */
+    err = inflateCopy(&d_copy, &d_stream);
+    CHECK_ERR(err, "inflateCopy");
+
+    /* Finish decompression using the copied stream */
+    d_copy.avail_in = (uInt)comprLen - (uInt)d_copy.total_in;
+    err = inflate(&d_copy, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (copy) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = inflateEnd(&d_copy);
+    CHECK_ERR(err, "inflateEnd (copy)");
+
+    /* End the original stream without further use */
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad inflateCopy result\n");
+        exit(1);
+    } else {
+        printf("deflateCopy()/inflateCopy(): %s\n", (char *)uncompr);
+    }
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +664,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_copy(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
