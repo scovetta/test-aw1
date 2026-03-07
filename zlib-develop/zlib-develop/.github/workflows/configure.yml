@@ -105,9 +105,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Install packages (Ubuntu)
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       if: runner.os == 'Linux' && matrix.packages
       run: |
         sudo apt-get update
@@ -137,10 +135,7 @@ jobs:
         QEMU_RUN: ${{ matrix.qemu-run }}
 
     - name: Upload build errors
-      uses: actions/upload-artifact@v6
-      if: failure()
-      with:
-        name: ${{ matrix.name }} (configure)
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         path: |
           ${{ matrix.build-dir || '.' }}/configure.log
         retention-days: 7
