@@ -409,6 +409,102 @@ static void test_sync(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateBound() and deflateBound_z(): verify that the upper bound on
+ * compressed size is valid (i.e., actual compressed output fits within it).
+ */
+static void test_deflate_bound(void) {
+    z_stream c_stream;
+    int err;
+    uLong sourceLen = (uLong)strlen(hello) + 1;
+    uLong bound;
+    z_size_t bound_z;
+    Byte *buf;
+
+    /* Test deflateBound() */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (deflateBound)");
+
+    bound = deflateBound(&c_stream, sourceLen);
+    if (bound == 0) {
+        fprintf(stderr, "deflateBound returned 0\n");
+        exit(1);
+    }
+
+    buf = (Byte*)calloc((uInt)bound, 1);
+    if (buf == Z_NULL) {
+        fprintf(stderr, "out of memory (deflateBound)\n");
+        exit(1);
+    }
+
+    c_stream.next_in  = (z_const Bytef*)hello;
+    c_stream.avail_in = (uInt)sourceLen;
+    c_stream.next_out = buf;
+    c_stream.avail_out = (uInt)bound;
+
+    /* Single-pass deflate with Z_FINISH must succeed within the bound */
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END within deflateBound\n");
+        exit(1);
+    }
+    if (c_stream.total_out > bound) {
+        fprintf(stderr, "deflateBound underestimated: total_out=%lu > bound=%lu\n",
+                c_stream.total_out, bound);
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (deflateBound)");
+    free(buf);
+    printf("deflateBound(): OK (bound=%lu, actual=%lu)\n",
+           bound, c_stream.total_out);
+
+    /* Test deflateBound_z() */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (deflateBound_z)");
+
+    bound_z = deflateBound_z(&c_stream, (z_size_t)sourceLen);
+    if (bound_z == 0) {
+        fprintf(stderr, "deflateBound_z returned 0\n");
+        exit(1);
+    }
+
+    buf = (Byte*)calloc((uInt)bound_z, 1);
+    if (buf == Z_NULL) {
+        fprintf(stderr, "out of memory (deflateBound_z)\n");
+        exit(1);
+    }
+
+    c_stream.next_in  = (z_const Bytef*)hello;
+    c_stream.avail_in = (uInt)sourceLen;
+    c_stream.next_out = buf;
+    c_stream.avail_out = (uInt)bound_z;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END within deflateBound_z\n");
+        exit(1);
+    }
+    if ((z_size_t)c_stream.total_out > bound_z) {
+        fprintf(stderr, "deflateBound_z underestimated: total_out=%lu > bound_z=%lu\n",
+                c_stream.total_out, (unsigned long)bound_z);
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (deflateBound_z)");
+    free(buf);
+    printf("deflateBound_z(): OK (bound_z=%lu, actual=%lu)\n",
+           (unsigned long)bound_z, c_stream.total_out);
+}
+
+/* ===========================================================================
  * Test deflate() with preset dictionary
  */
 static void test_dict_deflate(Byte *compr, uLong comprLen) {
@@ -544,6 +640,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_deflate_bound();
 
     free(compr);
     free(uncompr);
