@@ -5,7 +5,7 @@ In most cases the usual
     cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
 
 will create everything you need, however if you want something off default you can adjust several options fit your needs.
-Every option is list below (excluding the cmake-standard options), they can be set via cmake-gui or on cmdline with
+Every option is listed below (excluding the cmake-standard options), they can be set via cmake-gui or on the command line with
 
     -D<option>=ON/OFF
 
@@ -25,8 +25,8 @@ If this option is turned on, additional options are available from minizip (see 
 
     ZLIB_PREFIX=OFF -- prefix for all types and library functions, see zconf.h.in
 
-This option is only on windows available and may/will be turned off and removed somewhen in the future.
-If you rely cmake for finding and using zlib, this can be turned off, as `zlib1.dll` will never be used.
+This option is only on windows available and may/will be turned off and removed sometime in the future.
+If you rely on cmake for finding and using zlib, this can be turned off, as `zlib1.dll` will never be used.
 
 ## minizip-options with defaults ##
 
@@ -36,14 +36,14 @@ If you rely cmake for finding and using zlib, this can be turned off, as `zlib1.
 
     MINIZIP_BUILD_TESTING=ON -- Enable testing of minizip
 
-    MINIZIP_ENABLE_BZIP2=ON -- Build minizip withj bzip2 support
+    MINIZIP_ENABLE_BZIP2=ON -- Build minizip with bzip2 support
 
-A usable installation of bzip2 is needed or config will fail. Turn this option of in this case.
+A usable installation of bzip2 is needed or config will fail. Turn this option off in this case.
 
     MINIZIP_INSTALL=ON -- Enable installation of minizip
 
 This option is only available on mingw as they tend to name this lib different. Maybe this will also be
-removed in the future as. If you rely cmake for finding and using zlib, this can be turned off, as
+removed in the future. If you rely on cmake for finding and using zlib, this can be turned off, as
 the other file will never be used.
 
 ## Using the libs ##
@@ -66,7 +66,7 @@ or
 
 As it's possible to only build the shared or the static lib, you can make sure that everything you need
 is found. If no COMPONENTS are requested, everything needs to be found to satisfy your request. If the
-libraries are optional in you project, you can omit the REQUIRED and check yourself if the targets you
+libraries are optional in your project, you can omit the REQUIRED and check yourself if the targets you
 want to link against are created.
 
 When you search for minizip, it will search zlib for you, so only one of both is needed.
