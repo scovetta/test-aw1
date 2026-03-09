@@ -491,6 +491,82 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test adler32_combine() and crc32_combine():
+ * Verify that combining checksums of two parts equals the checksum of the
+ * concatenated whole, and test crc32_combine_gen() + crc32_combine_op().
+ */
+static void test_checksum_combine(void) {
+    /* Use two non-overlapping halves of the hello string */
+    static const char part1[] = "hello";
+    static const char part2[] = ", hello!";
+    char full[32];
+    uLong a1, a2, a_full, a_combined;
+    uLong c1, c2, c_full, c_combined;
+    uLong op;
+
+    /* Build the full string (part1 + part2) */
+    strcpy(full, part1);
+    strcat(full, part2);
+
+    /* --- adler32_combine test --- */
+    /* Compute Adler-32 of each part independently */
+    a1 = adler32(0L, Z_NULL, 0);
+    a1 = adler32(a1, (const Bytef *)part1, (uInt)strlen(part1));
+
+    a2 = adler32(0L, Z_NULL, 0);
+    a2 = adler32(a2, (const Bytef *)part2, (uInt)strlen(part2));
+
+    /* Compute Adler-32 of the full string for reference */
+    a_full = adler32(0L, Z_NULL, 0);
+    a_full = adler32(a_full, (const Bytef *)full, (uInt)strlen(full));
+
+    /* adler32_combine takes the length of the *second* segment */
+    a_combined = adler32_combine(a1, a2, (z_off_t)strlen(part2));
+
+    if (a_combined != a_full) {
+        fprintf(stderr, "adler32_combine error: got 0x%lx, expected 0x%lx\n",
+                a_combined, a_full);
+        exit(1);
+    }
+    printf("adler32_combine(): OK (0x%08lx)\n", a_combined);
+
+    /* --- crc32_combine test --- */
+    /* Compute CRC-32 of each part independently */
+    c1 = crc32(0L, Z_NULL, 0);
+    c1 = crc32(c1, (const Bytef *)part1, (uInt)strlen(part1));
+
+    c2 = crc32(0L, Z_NULL, 0);
+    c2 = crc32(c2, (const Bytef *)part2, (uInt)strlen(part2));
+
+    /* Compute CRC-32 of the full string for reference */
+    c_full = crc32(0L, Z_NULL, 0);
+    c_full = crc32(c_full, (const Bytef *)full, (uInt)strlen(full));
+
+    /* crc32_combine takes the length of the *second* segment */
+    c_combined = crc32_combine(c1, c2, (z_off_t)strlen(part2));
+
+    if (c_combined != c_full) {
+        fprintf(stderr, "crc32_combine error: got 0x%lx, expected 0x%lx\n",
+                c_combined, c_full);
+        exit(1);
+    }
+    printf("crc32_combine(): OK (0x%08lx)\n", c_combined);
+
+    /* --- crc32_combine_gen + crc32_combine_op test --- */
+    /* Generate the operator for len2, then apply it; result must match */
+    op = crc32_combine_gen((z_off_t)strlen(part2));
+    c_combined = crc32_combine_op(c1, c2, op);
+
+    if (c_combined != c_full) {
+        fprintf(stderr,
+                "crc32_combine_op error: got 0x%lx, expected 0x%lx\n",
+                c_combined, c_full);
+        exit(1);
+    }
+    printf("crc32_combine_op(): OK (0x%08lx)\n", c_combined);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +620,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_checksum_combine();
 
     free(compr);
     free(uncompr);
