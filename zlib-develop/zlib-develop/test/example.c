@@ -167,6 +167,39 @@ static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
 #endif /* Z_SOLO */
 
 /* ===========================================================================
+ * Test uncompress2() - decompression with source bytes consumed tracking
+ */
+static void test_uncompress2(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    int err;
+    uLong len = (uLong)strlen(hello)+1;
+    uLong srcLen;
+
+    /* Compress the hello string for use as input */
+    err = compress(compr, &comprLen, (const Bytef*)hello, len);
+    CHECK_ERR(err, "compress in test_uncompress2");
+
+    strcpy((char*)uncompr, "garbage");
+
+    /* Test that uncompress2 correctly decompresses and reports consumed bytes */
+    srcLen = comprLen;
+    err = uncompress2(uncompr, &uncomprLen, compr, &srcLen);
+    CHECK_ERR(err, "uncompress2");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress2: output mismatch\n");
+        exit(1);
+    }
+    /* All compressed bytes should have been consumed */
+    if (srcLen != comprLen) {
+        fprintf(stderr, "uncompress2: srcLen %lu != comprLen %lu\n",
+                srcLen, comprLen);
+        exit(1);
+    }
+    printf("uncompress2(): %s\n", (char *)uncompr);
+}
+
+/* ===========================================================================
  * Test deflate() with small buffers
  */
 static void test_deflate(Byte *compr, uLong comprLen) {
@@ -527,6 +560,8 @@ int main(int argc, char *argv[]) {
     (void)argv;
 #else
     test_compress(compr, comprLen, uncompr, uncomprLen);
+
+    test_uncompress2(compr, comprLen, uncompr, uncomprLen);
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
