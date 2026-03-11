@@ -491,6 +491,72 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateBound() and deflateBound_z()
+ *
+ * Verifies that deflateBound() returns an upper bound that is never exceeded
+ * by the actual compressed output.  Also checks the z_size_t variant.
+ */
+static void test_deflate_bound(Byte *compr, uLong comprLen) {
+    z_stream c_stream;
+    int err;
+    uLong srcLen = (uLong)strlen(hello) + 1;
+    uLong bound;
+    z_size_t bound_z;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    /* deflateBound() must be called after deflateInit() */
+    bound = deflateBound(&c_stream, srcLen);
+    if (bound == 0) {
+        fprintf(stderr, "deflateBound() returned 0\n");
+        exit(1);
+    }
+
+    /* also exercise the z_size_t variant */
+    bound_z = deflateBound_z(&c_stream, (z_size_t)srcLen);
+    if (bound_z == 0) {
+        fprintf(stderr, "deflateBound_z() returned 0\n");
+        exit(1);
+    }
+
+    /* compress the data */
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)srcLen;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* actual output must not exceed the bound */
+    if (c_stream.total_out > bound) {
+        fprintf(stderr,
+                "deflateBound() too small: actual=%lu, bound=%lu\n",
+                c_stream.total_out, bound);
+        exit(1);
+    }
+    if ((z_size_t)c_stream.total_out > bound_z) {
+        fprintf(stderr,
+                "deflateBound_z() too small: actual=%lu, bound=%lu\n",
+                c_stream.total_out, (uLong)bound_z);
+        exit(1);
+    }
+
+    printf("deflateBound(): OK (actual=%lu, bound=%lu)\n",
+           c_stream.total_out, bound);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +610,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_deflate_bound(compr, comprLen);
 
     free(compr);
     free(uncompr);
