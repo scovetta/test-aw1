@@ -1,30 +1,30 @@
-CMakeLists.txt  cmake build file
-ChangeLog       history of changes
-FAQ             Frequently Asked Questions about zlib
-INDEX           this file
-Makefile        dummy Makefile that tells you to ./configure
-Makefile.in     template for Unix Makefile
-README          guess what
-configure       configure script for Unix
-make_vms.com    makefile for VMS
+BUILD.bazel      Bazel build file
+CMakeLists.txt   cmake build file
+ChangeLog        history of changes
+FAQ              Frequently Asked Questions about zlib
+INDEX            this file
+LICENSE          zlib license
+MODULE.bazel     Bazel module file
+Makefile.in      template for Unix Makefile
+README           guess what
+README-cmake.md  cmake-specific build documentation
+configure        configure script for Unix
+make_vms.com     makefile for VMS
 test/example.c  zlib usages examples for build testing
 test/minigzip.c minimal gzip-like functionality for build testing
 test/infcover.c inf*.c code coverage for build coverage testing
 treebuild.xml   XML description of source file dependencies
-zconf.h.cmakein zconf.h template for cmake
 zconf.h.in      zconf.h template for configure
 zlib.3          Man page for zlib
 zlib.3.pdf      Man page in PDF format
 zlib.map        Linux symbol information
 zlib.pc.in      Template for pkg-config descriptor
 zlib.pc.cmakein zlib.pc template for cmake
-zlib2ansi       perl script to convert source files for C++ compilation
+zlibConfig.cmake.in cmake package config template
 
 amiga/          makefiles for Amiga SAS C
 doc/            documentation for formats and algorithms
 msdos/          makefiles for MSDOS
-old/            makefiles for various architectures and zlib documentation
-                files that have not yet been updated for zlib 1.2.x
 os400/          makefiles for OS/400
 qnx/            makefiles for QNX
 watcom/         makefiles for OpenWatcom
