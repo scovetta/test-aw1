@@ -109,7 +109,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
     - name: Install packages (Windows)
       if: runner.os == 'Windows'
@@ -137,7 +137,7 @@ jobs:
       run: cmake --build ../build --config ${{ matrix.build-config || 'Release' }} -t ${{ matrix.pkgtgt }}
 
     - name: Upload build errors
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       if: failure()
       with:
         name: ${{ matrix.name }} (cmake)
