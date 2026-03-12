@@ -167,6 +167,67 @@ static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
 #endif /* Z_SOLO */
 
 /* ===========================================================================
+ * Test adler32(), adler32_combine(), crc32(), crc32_combine(), and
+ * crc32_combine_gen()/crc32_combine_op() checksum functions.
+ *
+ * Validates that checksums computed over a message in two separate parts and
+ * then combined via the _combine() API equal the checksum computed over the
+ * whole message in one pass.
+ */
+static void test_checksums(void) {
+    /* Split "hello, hello!" into two parts: "hello, " and "hello!" */
+    static const char part1[] = "hello, ";
+    static const char part2[] = "hello!";
+    static const char whole[] = "hello, hello!";
+    uLong a1, a2, a_whole, a_combined;
+    uLong c1, c2, c_whole, c_combined, c_combined_op;
+    uLong op;
+
+    /* --- adler32 --- */
+    a1 = adler32(adler32(0L, Z_NULL, 0), (const Bytef *)part1,
+                 (uInt)strlen(part1));
+    a2 = adler32(adler32(0L, Z_NULL, 0), (const Bytef *)part2,
+                 (uInt)strlen(part2));
+    a_whole = adler32(adler32(0L, Z_NULL, 0), (const Bytef *)whole,
+                      (uInt)strlen(whole));
+    a_combined = adler32_combine(a1, a2, (z_off_t)strlen(part2));
+    if (a_combined != a_whole) {
+        fprintf(stderr,
+                "adler32_combine error: combined=0x%lx, expected=0x%lx\n",
+                a_combined, a_whole);
+        exit(1);
+    }
+    printf("adler32_combine(): OK (0x%08lx)\n", a_combined);
+
+    /* --- crc32 --- */
+    c1 = crc32(crc32(0L, Z_NULL, 0), (const Bytef *)part1,
+               (uInt)strlen(part1));
+    c2 = crc32(crc32(0L, Z_NULL, 0), (const Bytef *)part2,
+               (uInt)strlen(part2));
+    c_whole = crc32(crc32(0L, Z_NULL, 0), (const Bytef *)whole,
+                    (uInt)strlen(whole));
+    c_combined = crc32_combine(c1, c2, (z_off_t)strlen(part2));
+    if (c_combined != c_whole) {
+        fprintf(stderr,
+                "crc32_combine error: combined=0x%lx, expected=0x%lx\n",
+                c_combined, c_whole);
+        exit(1);
+    }
+    printf("crc32_combine(): OK (0x%08lx)\n", c_combined);
+
+    /* --- crc32_combine_gen / crc32_combine_op (faster pre-computed variant) */
+    op = crc32_combine_gen((z_off_t)strlen(part2));
+    c_combined_op = crc32_combine_op(c1, c2, op);
+    if (c_combined_op != c_whole) {
+        fprintf(stderr,
+                "crc32_combine_op error: combined=0x%lx, expected=0x%lx\n",
+                c_combined_op, c_whole);
+        exit(1);
+    }
+    printf("crc32_combine_op(): OK (0x%08lx)\n", c_combined_op);
+}
+
+/* ===========================================================================
  * Test deflate() with small buffers
  */
 static void test_deflate(Byte *compr, uLong comprLen) {
@@ -531,6 +592,8 @@ int main(int argc, char *argv[]) {
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
 #endif
+
+    test_checksums();
 
     test_deflate(compr, comprLen);
     test_inflate(compr, comprLen, uncompr, uncomprLen);
