@@ -85,6 +85,81 @@ static void test_compress(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test uncompress2(): like uncompress() but returns source bytes consumed.
+ * Validates:
+ *   - normal decompression matches original input
+ *   - *sourceLen reports the exact number of compressed bytes consumed
+ *   - truncated source returns Z_DATA_ERROR and consumed bytes <= truncated len
+ *   - undersized dest buffer returns Z_BUF_ERROR
+ */
+static void test_uncompress2(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    int err;
+    uLong len = (uLong)strlen(hello) + 1;
+    uLong srcLen;
+
+    /* Compress the test string first */
+    comprLen = 3 * uncomprLen;
+    err = compress(compr, &comprLen, (const Bytef *)hello, len);
+    CHECK_ERR(err, "compress (for uncompress2 test)");
+
+    /* --- Test 1: successful decompression --- */
+    strcpy((char *)uncompr, "garbage");
+    srcLen = comprLen;
+    err = uncompress2(uncompr, &uncomprLen, compr, &srcLen);
+    CHECK_ERR(err, "uncompress2");
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "uncompress2(): bad decompression output\n");
+        exit(1);
+    }
+    if (srcLen != comprLen) {
+        fprintf(stderr,
+                "uncompress2(): expected srcLen=%lu, got %lu\n",
+                comprLen, srcLen);
+        exit(1);
+    }
+    printf("uncompress2(): %s (consumed %lu of %lu bytes)\n",
+           (char *)uncompr, srcLen, comprLen);
+
+    /* --- Test 2: truncated source triggers Z_DATA_ERROR --- */
+    if (comprLen > 4) {
+        uLong truncLen = comprLen / 2;   /* feed only half the stream */
+        uLong destLen2 = uncomprLen;
+        srcLen = truncLen;
+        err = uncompress2(uncompr, &destLen2, compr, &srcLen);
+        if (err != Z_DATA_ERROR && err != Z_BUF_ERROR) {
+            fprintf(stderr,
+                    "uncompress2 truncated: expected Z_DATA_ERROR or"
+                    " Z_BUF_ERROR, got %d\n", err);
+            exit(1);
+        }
+        if (srcLen > truncLen) {
+            fprintf(stderr,
+                    "uncompress2 truncated: consumed %lu > supplied %lu\n",
+                    srcLen, truncLen);
+            exit(1);
+        }
+        printf("uncompress2() truncated stream: correctly returned error %d,"
+               " consumed %lu bytes\n", err, srcLen);
+    }
+
+    /* --- Test 3: destination buffer too small --- */
+    {
+        uLong smallLen = len / 2 > 0 ? len / 2 : 1;
+        srcLen = comprLen;
+        err = uncompress2(uncompr, &smallLen, compr, &srcLen);
+        if (err != Z_BUF_ERROR) {
+            fprintf(stderr,
+                    "uncompress2 small dest: expected Z_BUF_ERROR, got %d\n",
+                    err);
+            exit(1);
+        }
+        printf("uncompress2() small dest buffer: correctly returned"
+               " Z_BUF_ERROR\n");
+    }
+}
+
+/* ===========================================================================
  * Test read/write of .gz files
  */
 static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
@@ -527,6 +602,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 #else
     test_compress(compr, comprLen, uncompr, uncomprLen);
+    test_uncompress2(compr, comprLen, uncompr, uncomprLen);
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
