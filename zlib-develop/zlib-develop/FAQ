@@ -348,7 +348,7 @@ The latest zlib FAQ is at https://zlib.net/zlib_faq.html
 41. I'm having a problem with the zip functions in zlib, can you help?
 
     There are no zip functions in zlib.  You are probably using minizip by
-    Giles Vollant, which is found in the contrib directory of zlib.  It is not
+    Gilles Vollant, which is found in the contrib directory of zlib.  It is not
     part of zlib.  In fact none of the stuff in contrib is part of zlib.  The
     files in there are not supported by the zlib authors.  You need to contact
     the authors of the respective contribution for help.
