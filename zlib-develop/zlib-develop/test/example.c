@@ -491,6 +491,114 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateGetDictionary() and inflateGetDictionary()
+ *
+ * deflateGetDictionary() returns the sliding window (most recently compressed
+ * bytes) from an active deflate stream.  inflateGetDictionary() does the same
+ * for an inflate stream.  Both accept Z_NULL as the output buffer to query
+ * the length without copying.
+ */
+static void test_get_dictionary(Byte *compr, uLong comprLen, Byte *uncompr,
+                                 uLong uncomprLen) {
+    z_stream c_stream;
+    z_stream d_stream;
+    int err;
+    uLong len = (uLong)strlen(hello) + 1;
+    Byte dictBuf[32768];
+    uInt dictLen;
+
+    /* --- deflateGetDictionary --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)len;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    /* Query length only (dictionary == Z_NULL) */
+    dictLen = 0;
+    err = deflateGetDictionary(&c_stream, Z_NULL, &dictLen);
+    CHECK_ERR(err, "deflateGetDictionary (length only)");
+    if (dictLen == 0) {
+        fprintf(stderr, "deflateGetDictionary: expected non-zero length\n");
+        exit(1);
+    }
+
+    /* Retrieve the actual dictionary bytes */
+    err = deflateGetDictionary(&c_stream, dictBuf, &dictLen);
+    CHECK_ERR(err, "deflateGetDictionary");
+    if (dictLen == 0) {
+        fprintf(stderr, "deflateGetDictionary: no bytes returned\n");
+        exit(1);
+    }
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* --- inflateGetDictionary --- */
+    strcpy((char *)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)c_stream.total_out;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    /* Query inflate's sliding window length (dictionary == Z_NULL) */
+    {
+        uInt iDictLen = 0;
+        err = inflateGetDictionary(&d_stream, Z_NULL, &iDictLen);
+        CHECK_ERR(err, "inflateGetDictionary (length only)");
+        if (iDictLen == 0) {
+            fprintf(stderr, "inflateGetDictionary: expected non-zero length\n");
+            exit(1);
+        }
+
+        /* Retrieve the actual bytes and verify they contain 'hello' */
+        err = inflateGetDictionary(&d_stream, dictBuf, &iDictLen);
+        CHECK_ERR(err, "inflateGetDictionary");
+        if (iDictLen == 0 ||
+            memchr(dictBuf, 'h', iDictLen) == Z_NULL) {
+            fprintf(stderr, "inflateGetDictionary: unexpected content\n");
+            exit(1);
+        }
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate in test_get_dictionary\n");
+        exit(1);
+    }
+
+    printf("deflateGetDictionary() / inflateGetDictionary(): OK\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +652,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+    comprLen = 3 * uncomprLen;
+
+    test_get_dictionary(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
