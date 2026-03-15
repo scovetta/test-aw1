@@ -491,6 +491,103 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateBound() and deflateBound_z()
+ *
+ * Verifies that deflateBound() returns an upper bound on the compressed size,
+ * i.e. the actual compressed output never exceeds the predicted bound when
+ * using Z_FINISH with a single deflate() call.
+ */
+static void test_deflate_bound(Byte *compr, uLong comprLen) {
+    z_stream c_stream;
+    int err;
+    uLong sourceLen = (uLong)strlen(hello) + 1;
+    uLong bound;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    /* deflateBound() must be called after deflateInit() */
+    bound = deflateBound(&c_stream, sourceLen);
+    if (bound == 0) {
+        fprintf(stderr, "deflateBound returned zero\n");
+        exit(1);
+    }
+    if (bound > comprLen) {
+        fprintf(stderr, "deflateBound too large for test buffer\n");
+        exit(1);
+    }
+
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)sourceLen;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    /* Single deflate() call with Z_FINISH must fit within deflateBound() */
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    if (c_stream.total_out > bound) {
+        fprintf(stderr, "deflateBound underestimate: actual=%lu bound=%lu\n",
+                c_stream.total_out, bound);
+        exit(1);
+    }
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* Test deflateBound_z() with deflateInit2() for different window bits */
+    {
+        z_size_t bound_z;
+        z_stream c2;
+
+        c2.zalloc = zalloc;
+        c2.zfree  = zfree;
+        c2.opaque = (voidpf)0;
+
+        /* windowBits=15 (max), level=Z_BEST_COMPRESSION */
+        err = deflateInit2(&c2, Z_BEST_COMPRESSION, Z_DEFLATED,
+                           15, 8, Z_DEFAULT_STRATEGY);
+        CHECK_ERR(err, "deflateInit2");
+
+        bound_z = deflateBound_z(&c2, (z_size_t)sourceLen);
+        if (bound_z == 0) {
+            fprintf(stderr, "deflateBound_z returned zero\n");
+            exit(1);
+        }
+
+        c2.next_in  = (z_const unsigned char *)hello;
+        c2.avail_in = (uInt)sourceLen;
+        c2.next_out = compr;
+        c2.avail_out = (uInt)comprLen;
+
+        err = deflate(&c2, Z_FINISH);
+        if (err != Z_STREAM_END) {
+            fprintf(stderr, "deflate (deflateInit2) should report Z_STREAM_END\n");
+            exit(1);
+        }
+
+        if ((z_size_t)c2.total_out > bound_z) {
+            fprintf(stderr,
+                    "deflateBound_z underestimate: actual=%lu bound_z=%lu\n",
+                    (unsigned long)c2.total_out, (unsigned long)bound_z);
+            exit(1);
+        }
+
+        err = deflateEnd(&c2);
+        CHECK_ERR(err, "deflateEnd");
+    }
+
+    printf("deflateBound(): OK\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +641,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_deflate_bound(compr, comprLen);
 
     free(compr);
     free(uncompr);
