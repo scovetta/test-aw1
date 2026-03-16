@@ -491,6 +491,73 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test adler32_combine() and crc32_combine() / crc32_combine_gen() /
+ * crc32_combine_op().  Verifies that splitting data into two segments and
+ * combining the per-segment checksums yields the same result as computing the
+ * checksum over the whole buffer in one pass.
+ */
+static void test_checksum_combine(void) {
+    /* Use "hello, hello!" split after the comma+space (7 bytes / 7 bytes). */
+    static const Bytef data[] = "hello, hello!";
+    const uInt total_len = (uInt)(sizeof(data) - 1); /* exclude NUL */
+    const uInt part1_len = 7;                        /* "hello, " */
+    const uInt part2_len = total_len - part1_len;    /* "hello!" */
+
+    uLong adler_full, adler1, adler2, adler_combined;
+    uLong crc_full, crc1, crc2, crc_combined;
+    uLong op;
+
+    /* --- Adler-32 --- */
+    adler_full = adler32(0L, Z_NULL, 0);
+    adler_full = adler32(adler_full, data, total_len);
+
+    adler1 = adler32(0L, Z_NULL, 0);
+    adler1 = adler32(adler1, data, part1_len);
+
+    adler2 = adler32(0L, Z_NULL, 0);
+    adler2 = adler32(adler2, data + part1_len, part2_len);
+
+    adler_combined = adler32_combine(adler1, adler2, (z_off_t)part2_len);
+
+    if (adler_combined != adler_full) {
+        fprintf(stderr, "adler32_combine mismatch: 0x%lx vs 0x%lx\n",
+                adler_combined, adler_full);
+        exit(1);
+    }
+    printf("adler32_combine(): OK\n");
+
+    /* --- CRC-32 --- */
+    crc_full = crc32(0L, Z_NULL, 0);
+    crc_full = crc32(crc_full, data, total_len);
+
+    crc1 = crc32(0L, Z_NULL, 0);
+    crc1 = crc32(crc1, data, part1_len);
+
+    crc2 = crc32(0L, Z_NULL, 0);
+    crc2 = crc32(crc2, data + part1_len, part2_len);
+
+    crc_combined = crc32_combine(crc1, crc2, (z_off_t)part2_len);
+
+    if (crc_combined != crc_full) {
+        fprintf(stderr, "crc32_combine mismatch: 0x%lx vs 0x%lx\n",
+                crc_combined, crc_full);
+        exit(1);
+    }
+    printf("crc32_combine(): OK\n");
+
+    /* --- crc32_combine_gen / crc32_combine_op --- */
+    op = crc32_combine_gen((z_off_t)part2_len);
+    crc_combined = crc32_combine_op(crc1, crc2, op);
+
+    if (crc_combined != crc_full) {
+        fprintf(stderr, "crc32_combine_op mismatch: 0x%lx vs 0x%lx\n",
+                crc_combined, crc_full);
+        exit(1);
+    }
+    printf("crc32_combine_op(): OK\n");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +611,8 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_checksum_combine();
 
     free(compr);
     free(uncompr);
