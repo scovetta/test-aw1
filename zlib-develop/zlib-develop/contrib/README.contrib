@@ -39,6 +39,9 @@ minizip/    by Gilles Vollant <info@winimage.com>
         Includes Zip64 support by Mathias Svensson <mathias@result42.com>
         See https://www.winimage.com/zLibDll/minizip.html
 
+nuget/      by Jean-loup Gailly and Mark Adler
+        NuGet package for consuming native builds of zlib in .NET
+
 pascal/     by Bob Dellaca <bobdl@xtra.co.nz> et al.
         Support for Pascal
 
@@ -51,6 +54,8 @@ crc32vx/      by Ilya Leoshkevich <iii@linux.ibm.com>
 
 testzlib/   by Gilles Vollant <info@winimage.com>
         Example of the use of zlib
+
+vstudio/    Instructions for building zlib with Visual Studio using CMake
 
 zlib1-dll/
             by @Vollstrecker on github.com
