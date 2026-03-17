@@ -10,7 +10,7 @@ All possible work was done for compatibility.
 
 Background
 ---------------------
-When adding ZIP64 support Mathias Svensson found that Even Rouault have added ZIP64 
+When adding ZIP64 support Mathias Svensson found that Even Rouault have added ZIP64
 support for unzip.c into minizip for a open source project called gdal ( https://www.gdal.org/ )
 
 That was used as a starting point. And after that ZIP64 support was added to zip.c
@@ -22,7 +22,7 @@ Changed from MiniZip 1.0 to MiniZip 1.1
 * Added ZIP64 support for unzip ( by Even Rouault )
 * Added ZIP64 support for zip ( by Mathias Svensson )
 * Reverted some changed that Even Rouault did.
-* Bunch of patches received from Gulles Vollant that he received for MiniZip from various users.
+* Bunch of patches received from Gilles Vollant that he received for MiniZip from various users.
 * Added unzip patch for BZIP Compression method (patch create by Daniel Borca)
 * Added BZIP Compress method for zip
 * Did some refactoring and code cleanup
