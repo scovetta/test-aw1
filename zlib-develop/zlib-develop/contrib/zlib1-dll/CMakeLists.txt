@@ -160,14 +160,14 @@ include_directories(../../
 
 target_compile_definitions(zlib1
     PRIVATE ZLIB_BUILD
-            $<$<BOOL:NOT:${HAVE_FSEEKO}>:NO_FSEEKO>
+            $<$<NOT:$<BOOL:${HAVE_FSEEKO}>>:NO_FSEEKO>
             $<$<BOOL:${HAVE_UNISTD_H}>:HAVE_UNISTD_H=1>
             $<$<BOOL:${HAVE___ATTR__VIS_HIDDEN}>:HAVE_HIDDEN>
             $<$<BOOL:${MSVC}>:_CRT_SECURE_NO_DEPRECATE>
             $<$<BOOL:${MSVC}>:_CRT_NONSTDC_NO_DEPRECATE>
     PUBLIC $<$<BOOL:${HAVE_OFF64_T}>:_LARGEFILE64_SOURCE=1>
            $<$<BOOL:${BZIP2_FOUND}>:HAVE_BZIP2=1>
-           $<$<BOOL:NOT:${HAVE_FOPEN64}>:USE_FILE32API=1>)
+           $<$<NOT:$<BOOL:${HAVE_FOPEN64}>>:USE_FILE32API=1>)
 
 target_link_libraries(zlib1
     PUBLIC $<$<BOOL:${BZIP2_FOUND}>:BZip2::BZip2>)
