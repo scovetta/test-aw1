@@ -491,6 +491,144 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test inflateReset() and inflateReset2() — stream reuse without reallocation
+ *
+ * Verifies that:
+ *   - inflateReset() resets decompressor state so the same stream object can
+ *     decompress a second independent compressed buffer.
+ *   - inflateReset2() does the same while also accepting a new windowBits
+ *     value, allowing format/window changes without a full inflateEnd/Init.
+ */
+static void test_inflate_reset(Byte *compr, uLong comprLen, Byte *uncompr,
+                               uLong uncomprLen) {
+    z_stream c_stream;
+    z_stream d_stream;
+    int err;
+
+    static const char hello2[] = "world, world!";
+    uLong len1 = (uLong)strlen(hello) + 1;
+    uLong len2 = (uLong)strlen(hello2) + 1;
+    uLong compr2Len = comprLen / 2;
+    Byte *compr2 = compr + compr2Len; /* use second half of buffer for hello2 */
+
+    /* --- compress hello into compr[0..compr2Len) --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (reset test, msg1)");
+
+    c_stream.next_in  = (z_const Bytef *)hello;
+    c_stream.avail_in = (uInt)len1;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)compr2Len;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (reset test, msg1) error: %d\n", err);
+        exit(1);
+    }
+    uLong compr1Used = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (reset test, msg1)");
+
+    /* --- compress hello2 into compr2 --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (reset test, msg2)");
+
+    c_stream.next_in  = (z_const Bytef *)hello2;
+    c_stream.avail_in = (uInt)len2;
+    c_stream.next_out = compr2;
+    c_stream.avail_out = (uInt)compr2Len;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (reset test, msg2) error: %d\n", err);
+        exit(1);
+    }
+    uLong compr2Used = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (reset test, msg2)");
+
+    /* --- init one inflate stream --- */
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (reset test)");
+
+    /* --- decompress hello --- */
+    strcpy((char *)uncompr, "garbage");
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)compr1Used;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (reset test, first) error: %d\n", err);
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate (reset test, first)\n");
+        exit(1);
+    }
+
+    /* --- inflateReset: reuse stream for second buffer --- */
+    err = inflateReset(&d_stream);
+    CHECK_ERR(err, "inflateReset");
+
+    strcpy((char *)uncompr, "garbage");
+    d_stream.next_in  = compr2;
+    d_stream.avail_in = (uInt)compr2Used;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (reset test, second) error: %d\n", err);
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello2)) {
+        fprintf(stderr, "bad inflate (reset test, second)\n");
+        exit(1);
+    }
+    printf("inflateReset: OK\n");
+
+    /* --- inflateReset2: reset with the same windowBits, decompress hello --- */
+    err = inflateReset2(&d_stream, MAX_WBITS);
+    CHECK_ERR(err, "inflateReset2");
+
+    strcpy((char *)uncompr, "garbage");
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)compr1Used;
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (reset2 test) error: %d\n", err);
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate (reset2 test)\n");
+        exit(1);
+    }
+    printf("inflateReset2: OK\n");
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (reset test)");
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +682,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    comprLen = 3 * uncomprLen;
+    test_inflate_reset(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
