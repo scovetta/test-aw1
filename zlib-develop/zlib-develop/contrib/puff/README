@@ -16,7 +16,7 @@ being working C code.  It is meant to supplement RFC 1951, which formally
 describes the deflate format.  I have received many questions on details of the
 deflate format, and I hope that reading this code will answer those questions.
 puff.c is heavily commented with details of the deflate format, especially
-those little nooks and cranies of the format that might not be obvious from a
+those little nooks and crannies of the format that might not be obvious from a
 specification.
 
 puff.c may also be useful in applications where code size or memory usage is a
