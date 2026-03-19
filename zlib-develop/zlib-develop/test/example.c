@@ -491,6 +491,118 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateGetDictionary() and inflateGetDictionary()
+ */
+static void test_dict_get(Byte *compr, uLong comprLen, Byte *uncompr,
+                          uLong uncomprLen) {
+    z_stream c_stream; /* compression stream */
+    z_stream d_stream; /* decompression stream */
+    int err;
+    Byte retrieved[32768]; /* 32768 is always enough per zlib docs */
+    uInt retrievedLen;
+    uLong compressedLen;
+
+    /* --- Test deflateGetDictionary() --- */
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_BEST_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    err = deflateSetDictionary(&c_stream,
+                               (const Bytef*)dictionary,
+                               (uInt)sizeof(dictionary));
+    CHECK_ERR(err, "deflateSetDictionary");
+
+    /* Retrieve length only (dictionary == Z_NULL) */
+    retrievedLen = 0;
+    err = deflateGetDictionary(&c_stream, Z_NULL, &retrievedLen);
+    CHECK_ERR(err, "deflateGetDictionary (length only)");
+    if (retrievedLen == 0) {
+        fprintf(stderr, "deflateGetDictionary: expected non-zero length\n");
+        exit(1);
+    }
+
+    /* Retrieve actual dictionary bytes */
+    err = deflateGetDictionary(&c_stream, retrieved, &retrievedLen);
+    CHECK_ERR(err, "deflateGetDictionary");
+    if (retrievedLen == 0) {
+        fprintf(stderr, "deflateGetDictionary: no bytes retrieved\n");
+        exit(1);
+    }
+
+    /* Compress data using the dictionary */
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+    c_stream.next_in = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)strlen(hello) + 1;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+    compressedLen = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    /* --- Test inflateGetDictionary() --- */
+
+    strcpy((char*)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)compressedLen;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit");
+
+    d_stream.next_out = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    for (;;) {
+        err = inflate(&d_stream, Z_NO_FLUSH);
+        if (err == Z_STREAM_END) break;
+        if (err == Z_NEED_DICT) {
+            err = inflateSetDictionary(&d_stream, (const Bytef*)dictionary,
+                                       (int)sizeof(dictionary));
+            CHECK_ERR(err, "inflateSetDictionary");
+        } else {
+            CHECK_ERR(err, "inflate with dict");
+        }
+    }
+
+    /* Retrieve length only (dictionary == Z_NULL) — call before inflateEnd */
+    retrievedLen = 0;
+    err = inflateGetDictionary(&d_stream, Z_NULL, &retrievedLen);
+    CHECK_ERR(err, "inflateGetDictionary (length only)");
+    if (retrievedLen == 0) {
+        fprintf(stderr, "inflateGetDictionary: expected non-zero length\n");
+        exit(1);
+    }
+
+    /* Retrieve actual inflate sliding-window bytes */
+    err = inflateGetDictionary(&d_stream, retrieved, &retrievedLen);
+    CHECK_ERR(err, "inflateGetDictionary");
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad inflate with dict\n");
+        exit(1);
+    } else {
+        printf("deflateGetDictionary() and inflateGetDictionary(): OK\n");
+    }
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +656,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+    comprLen = 3 * uncomprLen;
+
+    test_dict_get(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
