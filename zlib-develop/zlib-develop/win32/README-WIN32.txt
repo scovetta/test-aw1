@@ -3,7 +3,7 @@ ZLIB DATA COMPRESSION LIBRARY
 zlib 1.3.2.1 is a general purpose data compression library.  All the code is
 thread safe.  The data format used by the zlib library is described by RFCs
 (Request for Comments) 1950 to 1952 in the files
-https://datatracker.ietf.org/doc/html/rfc1951 (zlib format), rfc1951.txt
+https://datatracker.ietf.org/doc/html/rfc1950 (zlib format), rfc1951.txt
 (deflate format), and rfc1952.txt (gzip format).
 
 All functions of the compression library are documented in the file zlib.h
