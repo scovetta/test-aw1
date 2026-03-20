@@ -491,6 +491,128 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflateSetHeader() and inflateGetHeader() for gzip header manipulation.
+ * Verifies that custom gzip header fields (name, comment, time, text flag)
+ * survive a round-trip through deflate/inflate.
+ */
+#ifndef Z_SOLO
+static void test_gzip_header(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    z_stream c_stream; /* compression stream */
+    z_stream d_stream; /* decompression stream */
+    gz_header c_head;  /* header to write */
+    gz_header d_head;  /* header to read back */
+    int err;
+    uLong len = (uLong)strlen(hello) + 1;
+
+    /* Buffers to receive name/comment fields when reading the header */
+    char name_buf[64];
+    char comment_buf[64];
+
+    /* --- Compression with custom gzip header --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    /* windowBits = MAX_WBITS + 16 selects gzip encoding */
+    err = deflateInit2(&c_stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                       MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY);
+    CHECK_ERR(err, "deflateInit2 (gzip header test)");
+
+    /* Populate the gzip header fields */
+    memset(&c_head, 0, sizeof(c_head));
+    c_head.text    = 1;                          /* mark payload as text */
+    c_head.time    = 1234567890UL;               /* fixed mtime for reproducibility */
+    c_head.os      = 255;                        /* unknown OS */
+    c_head.name    = (Bytef *)"hello.txt";       /* original filename */
+    c_head.comment = (Bytef *)"test comment";    /* gzip comment field */
+    c_head.hcrc    = 1;                          /* include header CRC16 */
+
+    err = deflateSetHeader(&c_stream, &c_head);
+    CHECK_ERR(err, "deflateSetHeader");
+
+    c_stream.next_in   = (z_const unsigned char *)hello;
+    c_stream.avail_in  = (uInt)len;
+    c_stream.next_out  = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate (gzip header test) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (gzip header test)");
+
+    /* --- Decompression, reading back the gzip header --- */
+    strcpy((char *)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    d_stream.next_in  = compr;
+    d_stream.avail_in = (uInt)c_stream.total_out;
+
+    /* windowBits = MAX_WBITS + 16 selects gzip decoding */
+    err = inflateInit2(&d_stream, MAX_WBITS + 16);
+    CHECK_ERR(err, "inflateInit2 (gzip header test)");
+
+    /* Register header struct before inflating so fields are captured */
+    memset(&d_head, 0, sizeof(d_head));
+    d_head.name      = (Bytef *)name_buf;
+    d_head.name_max  = (uInt)sizeof(name_buf);
+    d_head.comment   = (Bytef *)comment_buf;
+    d_head.comm_max  = (uInt)sizeof(comment_buf);
+
+    err = inflateGetHeader(&d_stream, &d_head);
+    CHECK_ERR(err, "inflateGetHeader");
+
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate (gzip header test) should report Z_STREAM_END\n");
+        exit(1);
+    }
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (gzip header test)");
+
+    /* Verify decompressed data */
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate (gzip header test)\n");
+        exit(1);
+    }
+
+    /* Verify header fields were preserved */
+    if (!d_head.done) {
+        fprintf(stderr, "gzip header not fully read\n");
+        exit(1);
+    }
+    if (d_head.text != 1) {
+        fprintf(stderr, "gzip header: text flag mismatch\n");
+        exit(1);
+    }
+    if (d_head.time != 1234567890UL) {
+        fprintf(stderr, "gzip header: time mismatch (%lu)\n",
+                (unsigned long)d_head.time);
+        exit(1);
+    }
+    if (strcmp(name_buf, "hello.txt") != 0) {
+        fprintf(stderr, "gzip header: name mismatch (%s)\n", name_buf);
+        exit(1);
+    }
+    if (strcmp(comment_buf, "test comment") != 0) {
+        fprintf(stderr, "gzip header: comment mismatch (%s)\n", comment_buf);
+        exit(1);
+    }
+
+    printf("deflateSetHeader()/inflateGetHeader(): OK\n");
+}
+#endif /* !Z_SOLO */
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +666,10 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+#ifndef Z_SOLO
+    test_gzip_header(compr, comprLen, uncompr, uncomprLen);
+#endif
 
     free(compr);
     free(uncompr);
