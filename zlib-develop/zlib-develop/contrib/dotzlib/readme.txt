@@ -27,7 +27,7 @@ Build instructions:
 1. Using Visual Studio.Net 2003:
    Open DotZLib.sln in VS.Net and build from there. Output file (DotZLib.dll)
    will be found ./DotZLib/bin/release or ./DotZLib/bin/debug, depending on
-   you are building the release or debug version of the library. Check
+   whether you are building the release or debug version of the library. Check
    DotZLib/UnitTests.cs for instructions on how to include unit tests in the
    build.
 
