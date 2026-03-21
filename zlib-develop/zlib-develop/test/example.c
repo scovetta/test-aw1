@@ -409,6 +409,146 @@ static void test_sync(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflate() with Z_PARTIAL_FLUSH and Z_SYNC_FLUSH flush modes.
+ * Z_PARTIAL_FLUSH flushes output aligned to byte boundaries but without
+ * resetting the compression state.  Z_SYNC_FLUSH additionally emits an
+ * empty stored block so the decompressor can recover all pending output.
+ */
+static void test_flush_modes(Byte *compr, uLong comprLen,
+                             Byte *uncompr, uLong uncomprLen) {
+    z_stream c_stream; /* compression stream */
+    z_stream d_stream; /* decompression stream */
+    int err;
+    uLong clen;
+
+    /* --- Z_PARTIAL_FLUSH --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (partial flush)");
+
+    c_stream.next_in   = (z_const unsigned char *)hello;
+    c_stream.avail_in  = (uInt)strlen(hello) + 1;
+    c_stream.next_out  = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    /* Flush with Z_PARTIAL_FLUSH — output is byte-aligned but the
+     * compressed stream is not yet terminated. */
+    err = deflate(&c_stream, Z_PARTIAL_FLUSH);
+    if (err != Z_OK) {
+        fprintf(stderr, "deflate(Z_PARTIAL_FLUSH) error: %d\n", err);
+        exit(1);
+    }
+
+    /* Finish the stream. */
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate(Z_FINISH) after Z_PARTIAL_FLUSH should "
+                        "return Z_STREAM_END\n");
+        exit(1);
+    }
+    clen = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (partial flush)");
+
+    /* Decompress and verify. */
+    strcpy((char *)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (partial flush)");
+
+    d_stream.next_in   = compr;
+    d_stream.avail_in  = (uInt)clen;
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate after Z_PARTIAL_FLUSH should return "
+                        "Z_STREAM_END\n");
+        exit(1);
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (partial flush)");
+
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate after Z_PARTIAL_FLUSH\n");
+        exit(1);
+    }
+    printf("deflate(Z_PARTIAL_FLUSH): OK\n");
+
+    /* --- Z_SYNC_FLUSH --- */
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (sync flush)");
+
+    c_stream.next_in   = (z_const unsigned char *)hello;
+    c_stream.avail_in  = (uInt)strlen(hello) + 1;
+    c_stream.next_out  = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    /* Z_SYNC_FLUSH terminates the current deflate block with padding so
+     * that the decompressor can recover all output produced so far. */
+    err = deflate(&c_stream, Z_SYNC_FLUSH);
+    if (err != Z_OK) {
+        fprintf(stderr, "deflate(Z_SYNC_FLUSH) error: %d\n", err);
+        exit(1);
+    }
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate(Z_FINISH) after Z_SYNC_FLUSH should "
+                        "return Z_STREAM_END\n");
+        exit(1);
+    }
+    clen = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (sync flush)");
+
+    strcpy((char *)uncompr, "garbage");
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (sync flush)");
+
+    d_stream.next_in   = compr;
+    d_stream.avail_in  = (uInt)clen;
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    err = inflate(&d_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate after Z_SYNC_FLUSH should return "
+                        "Z_STREAM_END\n");
+        exit(1);
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (sync flush)");
+
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad inflate after Z_SYNC_FLUSH\n");
+        exit(1);
+    }
+    printf("deflate(Z_SYNC_FLUSH): OK\n");
+}
+
+/* ===========================================================================
  * Test deflate() with preset dictionary
  */
 static void test_dict_deflate(Byte *compr, uLong comprLen) {
@@ -541,6 +681,8 @@ int main(int argc, char *argv[]) {
     test_flush(compr, &comprLen);
     test_sync(compr, comprLen, uncompr, uncomprLen);
     comprLen = 3 * uncomprLen;
+
+    test_flush_modes(compr, comprLen, uncompr, uncomprLen);
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
