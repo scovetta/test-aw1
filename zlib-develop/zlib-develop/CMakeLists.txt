@@ -110,7 +110,7 @@ check_c_source_compiles(
     "
     HAVE___ATTR__VIS_HIDDEN)
 
-unset(CMAKE_COMPILE_FLAGS)
+unset(CMAKE_REQUIRED_FLAGS)
 set(ZLIB_PC ${zlib_BINARY_DIR}/zlib.pc)
 configure_file(${zlib_SOURCE_DIR}/zlib.pc.cmakein ${ZLIB_PC} @ONLY)
 configure_file(${zlib_BINARY_DIR}/zconf.h.cmakein ${zlib_BINARY_DIR}/zconf.h)
