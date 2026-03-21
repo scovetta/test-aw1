@@ -72,7 +72,7 @@ in the zlib distribution, or at the following location:
 
     There is still a ZLIB_DLL macro, that can trigger a more
     efficient build and use of the DLL, but compatibility no
-    longer dependents on it.
+    longer depends on it.
 
 
  3. Can I build ZLIB.DLL from the new zlib sources, and replace
