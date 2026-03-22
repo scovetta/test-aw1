@@ -490,6 +490,98 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
     }
 }
 
+#ifndef Z_SOLO
+
+/* ===========================================================================
+ * Test gzwrite(), gzflush(), gzeof(), and gzoffset()
+ *
+ * gzwrite() writes raw bytes to a gz file (unlike gzputs/gzputc which write
+ * text). gzflush() forces pending data to be written to the file. gzeof()
+ * detects end-of-file during reading. gzoffset() returns the current byte
+ * offset in the underlying compressed file.
+ */
+static void test_gz_state(const char *fname, Byte *uncompr, uLong uncomprLen) {
+#ifdef NO_GZCOMPRESS
+    fprintf(stderr, "NO_GZCOMPRESS -- gz* functions cannot compress\n");
+#else
+    gzFile file;
+    int err;
+    z_off_t off_start, off_end;
+    const char *msg = hello;
+    int len = (int)strlen(msg) + 1; /* include null terminator */
+
+    /* Write data using gzwrite() (binary write interface) */
+    file = gzopen(fname, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error\n");
+        exit(1);
+    }
+    if (gzwrite(file, msg, (unsigned)len) != len) {
+        fprintf(stderr, "gzwrite err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+    /* gzflush forces pending compressed output to the file without closing */
+    err = gzflush(file, Z_SYNC_FLUSH);
+    if (err != Z_OK) {
+        fprintf(stderr, "gzflush err: %d\n", err);
+        exit(1);
+    }
+    gzclose(file);
+
+    /* Read back and verify gzeof() and gzoffset() behavior */
+    file = gzopen(fname, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error\n");
+        exit(1);
+    }
+
+    /* gzeof() must return 0 at the start (not yet at end of file) */
+    if (gzeof(file)) {
+        fprintf(stderr, "gzeof should be 0 at start of file\n");
+        exit(1);
+    }
+
+    /* gzoffset() returns the compressed-file byte offset; must be >= 0 */
+    off_start = gzoffset(file);
+    if (off_start < 0) {
+        fprintf(stderr, "gzoffset error at start\n");
+        exit(1);
+    }
+
+    /* Read the entire uncompressed content */
+    if (gzread(file, uncompr, (unsigned)len) != len) {
+        fprintf(stderr, "gzread err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad gzread content: %s\n", (char *)uncompr);
+        exit(1);
+    }
+
+    /* Read one more byte to trigger EOF detection */
+    gzread(file, uncompr, 1);
+
+    /* gzeof() must now return 1 (end-of-file reached) */
+    if (!gzeof(file)) {
+        fprintf(stderr, "gzeof should be 1 after reading past end\n");
+        exit(1);
+    }
+
+    /* gzoffset() at end must be greater than the starting offset */
+    off_end = gzoffset(file);
+    if (off_end <= off_start) {
+        fprintf(stderr, "gzoffset at end (%ld) should exceed start (%ld)\n",
+                (long)off_end, (long)off_start);
+        exit(1);
+    }
+
+    gzclose(file);
+    printf("gz state (gzwrite/gzflush/gzeof/gzoffset): OK\n");
+#endif
+}
+
+#endif /* !Z_SOLO */
+
 /* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
@@ -530,6 +622,9 @@ int main(int argc, char *argv[]) {
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
+
+    test_gz_state((argc > 1 ? argv[1] : TESTFILE),
+                  uncompr, uncomprLen);
 #endif
 
     test_deflate(compr, comprLen);
