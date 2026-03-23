@@ -491,6 +491,60 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test uncompress2() and uncompress2_z(): verify that sourceLen is updated
+ * to reflect the number of compressed bytes actually consumed.
+ */
+static void test_uncompress2(Byte *compr, uLong comprLen, Byte *uncompr,
+                              uLong uncomprLen) {
+    int err;
+    uLong len = (uLong)strlen(hello)+1;
+    uLong srcLen;
+    z_size_t srcLen_z, destLen_z;
+
+    /* Compress with standard compress() so we have a known input */
+    err = compress(compr, &comprLen, (const Bytef*)hello, len);
+    CHECK_ERR(err, "compress (for uncompress2)");
+
+    /* --- Test uncompress2(): sourceLen should equal comprLen on success --- */
+    strcpy((char*)uncompr, "garbage");
+    srcLen = comprLen + 100;   /* supply extra length; should be trimmed */
+    err = uncompress2(uncompr, &uncomprLen, compr, &srcLen);
+    CHECK_ERR(err, "uncompress2");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress2 output\n");
+        exit(1);
+    }
+    if (srcLen != comprLen) {
+        fprintf(stderr, "uncompress2: wrong sourceLen consumed: %lu vs %lu\n",
+                srcLen, comprLen);
+        exit(1);
+    }
+    printf("uncompress2(): %s (consumed %lu bytes)\n", (char *)uncompr, srcLen);
+
+    /* --- Test uncompress2_z(): same semantics with z_size_t lengths --- */
+    uncomprLen = 20000;
+    strcpy((char*)uncompr, "garbage");
+    destLen_z = (z_size_t)uncomprLen;
+    srcLen_z  = (z_size_t)comprLen + 100;
+    err = uncompress2_z(uncompr, &destLen_z, compr, &srcLen_z);
+    CHECK_ERR(err, "uncompress2_z");
+
+    if (strcmp((char*)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress2_z output\n");
+        exit(1);
+    }
+    if (srcLen_z != (z_size_t)comprLen) {
+        fprintf(stderr,
+                "uncompress2_z: wrong sourceLen consumed: %lu vs %lu\n",
+                (uLong)srcLen_z, comprLen);
+        exit(1);
+    }
+    printf("uncompress2_z(): %s (consumed %lu bytes)\n",
+           (char *)uncompr, (uLong)srcLen_z);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -527,6 +581,8 @@ int main(int argc, char *argv[]) {
     (void)argv;
 #else
     test_compress(compr, comprLen, uncompr, uncomprLen);
+
+    test_uncompress2(compr, comprLen, uncompr, uncomprLen);
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
