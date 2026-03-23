@@ -47,11 +47,11 @@
                <QPM:ProductEmail>alain.bonnefoy@icbt.com</QPM:ProductEmail>
                <QPM:VendorName>Public</QPM:VendorName>
                <QPM:VendorInstallName>public</QPM:VendorInstallName>
-               <QPM:VendorURL>www.gzip.org/zlib</QPM:VendorURL>
+               <QPM:VendorURL>https://zlib.net/</QPM:VendorURL>
                <QPM:VendorEmbedURL></QPM:VendorEmbedURL>
                <QPM:VendorEmail></QPM:VendorEmail>
                <QPM:AuthorName>Jean-Loup Gailly,Mark Adler</QPM:AuthorName>
-               <QPM:AuthorURL>www.gzip.org/zlib</QPM:AuthorURL>
+               <QPM:AuthorURL>https://zlib.net/</QPM:AuthorURL>
                <QPM:AuthorEmbedURL></QPM:AuthorEmbedURL>
                <QPM:AuthorEmail>zlib@gzip.org</QPM:AuthorEmail>
                <QPM:ProductIconSmall></QPM:ProductIconSmall>
