@@ -247,7 +247,7 @@ The latest zlib FAQ is at https://zlib.net/zlib_faq.html
     Each call of inflate() or deflate() is limited to input and output chunks
     of the maximum value that can be stored in the compiler's "unsigned int"
     type, but there is no limit to the number of chunks.  Note however that the
-    strm.total_in and strm_total_out counters may be limited to 4 GB.  These
+    strm.total_in and strm.total_out counters may be limited to 4 GB.  These
     counters are provided as a convenience and are not used internally by
     inflate() or deflate().  The application can easily set up its own counters
     updated after each call of inflate() or deflate() to count beyond 4 GB.
