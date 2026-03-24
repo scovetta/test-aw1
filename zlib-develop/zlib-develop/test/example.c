@@ -164,6 +164,84 @@ static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
 #endif
 }
 
+/* ===========================================================================
+ * Test gzdirect(), gzrewind(), and gzclearerr()
+ *
+ * gzdirect() reports whether a gzFile reads raw (1) or gzip-compressed (0)
+ * data.  gzrewind() repositions a readable gzFile to the beginning so data
+ * can be re-read.  gzclearerr() resets the error and end-of-file indicators.
+ */
+static void test_gz_utilities(const char *fname, Byte *uncompr,
+                               uLong uncomprLen) {
+#ifdef NO_GZCOMPRESS
+    fprintf(stderr, "NO_GZCOMPRESS -- skipping gz utility tests\n");
+#else
+    int err;
+    int len = (int)strlen(hello) + 1; /* include null terminator */
+    gzFile file;
+
+    /* Write a gzip-compressed file with the hello string */
+    file = gzopen(fname, "wb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error in test_gz_utilities\n");
+        exit(1);
+    }
+    if (gzwrite(file, hello, (unsigned)len) != len) {
+        fprintf(stderr, "gzwrite err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+    gzclose(file);
+
+    /* Open the gzip file for reading */
+    file = gzopen(fname, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "gzopen error in test_gz_utilities\n");
+        exit(1);
+    }
+
+    /* gzdirect() must return 0: the file is gzip-compressed, not transparent */
+    if (gzdirect(file) != 0) {
+        fprintf(stderr, "gzdirect error: expected 0 for gzip file\n");
+        exit(1);
+    }
+    printf("gzdirect() on gzip file: 0 (compressed)\n");
+
+    /* Read the data and verify it round-trips correctly */
+    strcpy((char *)uncompr, "garbage");
+    if (gzread(file, uncompr, (unsigned)uncomprLen) != len) {
+        fprintf(stderr, "gzread err: %s\n", gzerror(file, &err));
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello) != 0) {
+        fprintf(stderr, "bad gzread in test_gz_utilities\n");
+        exit(1);
+    }
+
+    /* gzrewind() resets the read position to the beginning of the file */
+    if (gzrewind(file) != 0) {
+        fprintf(stderr, "gzrewind error\n");
+        exit(1);
+    }
+    strcpy((char *)uncompr, "garbage");
+    if (gzread(file, uncompr, (unsigned)uncomprLen) != len) {
+        fprintf(stderr, "gzread after gzrewind err: %s\n",
+                gzerror(file, &err));
+        exit(1);
+    }
+    if (strcmp((char *)uncompr, hello) != 0) {
+        fprintf(stderr, "bad gzread after gzrewind\n");
+        exit(1);
+    }
+    printf("gzrewind(): %s\n", (char *)uncompr);
+
+    /* gzclearerr() resets the error and EOF flags; call it to exercise the API */
+    gzclearerr(file);
+    printf("gzclearerr(): OK\n");
+
+    gzclose(file);
+#endif
+}
+
 #endif /* Z_SOLO */
 
 /* ===========================================================================
@@ -530,6 +608,9 @@ int main(int argc, char *argv[]) {
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
+
+    test_gz_utilities((argc > 1 ? argv[1] : TESTFILE),
+                      uncompr, uncomprLen);
 #endif
 
     test_deflate(compr, comprLen);
