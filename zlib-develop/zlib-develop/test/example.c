@@ -85,6 +85,62 @@ static void test_compress(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test compress_z(), compress2_z(), compressBound_z(), and uncompress_z().
+ * These are the size_t (z_size_t) variants of the standard compress/uncompress
+ * functions, introduced to support platforms where uLong != size_t.
+ */
+static void test_compress_z(Byte *compr, uLong comprLen, Byte *uncompr,
+                             uLong uncomprLen) {
+    int err;
+    z_size_t len = strlen(hello) + 1;
+    z_size_t cLen, uLen, bound;
+
+    /* Verify compressBound_z() returns a value at least as large as len */
+    bound = compressBound_z(len);
+    if (bound < len) {
+        fprintf(stderr, "compressBound_z() returned too small a bound\n");
+        exit(1);
+    }
+    printf("compressBound_z(%lu) = %lu\n", (uLong)len, (uLong)bound);
+
+    /* Test compress_z() — compress using z_size_t lengths */
+    cLen = (z_size_t)comprLen;
+    err = compress_z(compr, &cLen, (const Bytef *)hello, len);
+    CHECK_ERR(err, "compress_z");
+    printf("compress_z(): OK, compressed %lu bytes to %lu bytes\n",
+           (uLong)len, (uLong)cLen);
+
+    /* Test uncompress_z() — decompress using z_size_t lengths */
+    strcpy((char *)uncompr, "garbage");
+    uLen = (z_size_t)uncomprLen;
+    err = uncompress_z(uncompr, &uLen, compr, cLen);
+    CHECK_ERR(err, "uncompress_z");
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress_z\n");
+        exit(1);
+    }
+    printf("uncompress_z(): %s\n", (char *)uncompr);
+
+    /* Test compress2_z() — compress with explicit level using z_size_t */
+    cLen = (z_size_t)comprLen;
+    err = compress2_z(compr, &cLen, (const Bytef *)hello, len, Z_BEST_COMPRESSION);
+    CHECK_ERR(err, "compress2_z");
+    printf("compress2_z(Z_BEST_COMPRESSION): OK, compressed %lu bytes to %lu bytes\n",
+           (uLong)len, (uLong)cLen);
+
+    /* Verify compressed data roundtrips correctly */
+    strcpy((char *)uncompr, "garbage");
+    uLen = (z_size_t)uncomprLen;
+    err = uncompress_z(uncompr, &uLen, compr, cLen);
+    CHECK_ERR(err, "uncompress_z after compress2_z");
+    if (strcmp((char *)uncompr, hello)) {
+        fprintf(stderr, "bad uncompress_z after compress2_z\n");
+        exit(1);
+    }
+    printf("uncompress_z() after compress2_z: %s\n", (char *)uncompr);
+}
+
+/* ===========================================================================
  * Test read/write of .gz files
  */
 static void test_gzio(const char *fname, Byte *uncompr, uLong uncomprLen) {
@@ -527,6 +583,8 @@ int main(int argc, char *argv[]) {
     (void)argv;
 #else
     test_compress(compr, comprLen, uncompr, uncomprLen);
+
+    test_compress_z(compr, comprLen, uncompr, uncomprLen);
 
     test_gzio((argc > 1 ? argv[1] : TESTFILE),
               uncompr, uncomprLen);
