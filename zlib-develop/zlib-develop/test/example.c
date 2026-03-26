@@ -491,6 +491,65 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test adler32_z() — the size_t-length variant of adler32().
+ * Verifies that adler32_z() returns the same value as adler32() for the
+ * same input, and that the initial value with Z_NULL input matches.
+ */
+static void test_adler32_z(void) {
+    static const char buf[] = "hello, hello!";
+    z_size_t len = sizeof(buf) - 1;  /* exclude NUL terminator */
+    uLong adler_ref, adler_z;
+
+    /* adler32_z(0, Z_NULL, 0) must return the Adler-32 initial value (1) */
+    adler_z = adler32_z(0L, Z_NULL, 0);
+    adler_ref = adler32(0L, Z_NULL, 0);
+    if (adler_z != adler_ref) {
+        fprintf(stderr, "adler32_z initial value mismatch: %lu vs %lu\n",
+                adler_z, adler_ref);
+        exit(1);
+    }
+
+    /* adler32_z must produce the same checksum as adler32() */
+    adler_z   = adler32_z(adler_z,   (const Bytef *)buf, len);
+    adler_ref = adler32  (adler_ref, (const Bytef *)buf, (uInt)len);
+    if (adler_z != adler_ref) {
+        fprintf(stderr, "adler32_z mismatch: %lu vs %lu\n",
+                adler_z, adler_ref);
+        exit(1);
+    }
+    printf("adler32_z(): OK (checksum = 0x%08lx)\n", adler_z);
+}
+
+/* ===========================================================================
+ * Test crc32_z() — the size_t-length variant of crc32().
+ * Verifies that crc32_z() returns the same value as crc32() for the
+ * same input, and that the initial value with Z_NULL input matches.
+ */
+static void test_crc32_z(void) {
+    static const char buf[] = "hello, hello!";
+    z_size_t len = sizeof(buf) - 1;  /* exclude NUL terminator */
+    uLong crc_ref, crc_z;
+
+    /* crc32_z(0, Z_NULL, 0) must return the CRC-32 initial value (0) */
+    crc_z   = crc32_z(0L, Z_NULL, 0);
+    crc_ref = crc32  (0L, Z_NULL, 0);
+    if (crc_z != crc_ref) {
+        fprintf(stderr, "crc32_z initial value mismatch: %lu vs %lu\n",
+                crc_z, crc_ref);
+        exit(1);
+    }
+
+    /* crc32_z must produce the same checksum as crc32() */
+    crc_z   = crc32_z(crc_z,   (const Bytef *)buf, len);
+    crc_ref = crc32  (crc_ref, (const Bytef *)buf, (uInt)len);
+    if (crc_z != crc_ref) {
+        fprintf(stderr, "crc32_z mismatch: %lu vs %lu\n", crc_z, crc_ref);
+        exit(1);
+    }
+    printf("crc32_z(): OK (checksum = 0x%08lx)\n", crc_z);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +603,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    test_adler32_z();
+    test_crc32_z();
 
     free(compr);
     free(uncompr);
