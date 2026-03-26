@@ -8,7 +8,7 @@ It provides Ada-style access to the ZLib C library.
 
         Here are the main changes since ZLib.Ada 1.2:
 
-- Attention: ZLib.Read generic routine have a initialization requirement
+- Attention: ZLib.Read generic routine has an initialization requirement
   for Read_Last parameter now. It is a bit incompatible with previous version,
   but extends functionality, we could use new parameters Allow_Read_Some and
   Flush now.
@@ -30,7 +30,7 @@ It provides Ada-style access to the ZLib C library.
 
         How to build ZLib.Ada under GNAT
 
-You should have the ZLib library already build on your computer, before
+You should have the ZLib library already built on your computer, before
 building ZLib.Ada. Make the directory of ZLib.Ada sources current and
 issue the command:
 
