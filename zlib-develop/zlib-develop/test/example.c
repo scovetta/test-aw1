@@ -491,6 +491,87 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test deflatePending() and deflateUsed()
+ *
+ * deflatePending() reports how many bytes/bits are generated but not yet
+ * provided in the available output buffer.
+ * deflateUsed() reports how many bits of the last byte were used when
+ * flushing to a byte boundary.
+ */
+static void test_deflate_pending(Byte *compr, uLong comprLen) {
+    z_stream c_stream;
+    int err;
+    unsigned pending;
+    int bits;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit");
+
+    /* Before any data, pending output and buffered bits should be zero. */
+    err = deflatePending(&c_stream, &pending, &bits);
+    CHECK_ERR(err, "deflatePending (initial)");
+    if (pending != 0 || bits != 0) {
+        fprintf(stderr, "deflatePending: expected (0,0) initially, got (%u,%d)\n",
+                pending, bits);
+        exit(1);
+    }
+
+    /* Compress and sync-flush so the compressor flushes to a byte boundary. */
+    c_stream.next_in  = (z_const unsigned char *)hello;
+    c_stream.avail_in = (uInt)strlen(hello) + 1;
+    c_stream.next_out = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    err = deflate(&c_stream, Z_SYNC_FLUSH);
+    CHECK_ERR(err, "deflate Z_SYNC_FLUSH");
+
+    /*
+     * After a sync flush all pending bytes should have been delivered
+     * (avail_out > 0 means the output buffer was not exhausted).
+     */
+    err = deflatePending(&c_stream, &pending, &bits);
+    CHECK_ERR(err, "deflatePending (after flush)");
+    if (bits < 0 || bits > 7) {
+        fprintf(stderr, "deflatePending: bits out of range after flush: %d\n", bits);
+        exit(1);
+    }
+
+    /*
+     * deflateUsed() returns the number of bits used in the last output byte
+     * after a byte-boundary flush.  The value must be in [1..8], or 0 if
+     * no flush has occurred yet.
+     */
+    err = deflateUsed(&c_stream, &bits);
+    CHECK_ERR(err, "deflateUsed");
+    if (bits < 0 || bits > 8) {
+        fprintf(stderr, "deflateUsed: bits out of range: %d\n", bits);
+        exit(1);
+    }
+
+    /* Verify that passing Z_NULL pointers is accepted without crashing. */
+    err = deflatePending(&c_stream, Z_NULL, Z_NULL);
+    CHECK_ERR(err, "deflatePending (NULL, NULL)");
+
+    /* Finish the stream. */
+    c_stream.avail_in = 0;
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END\n");
+        exit(1);
+    }
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd");
+
+    printf("deflatePending()/deflateUsed(): OK (bits used in last byte = %d)\n",
+           bits);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +625,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+    comprLen = 3 * uncomprLen;
+
+    test_deflate_pending(compr, comprLen);
 
     free(compr);
     free(uncompr);
