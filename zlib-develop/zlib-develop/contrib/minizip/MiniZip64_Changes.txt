@@ -1,6 +1,6 @@
 
 MiniZip 1.1 was derived from MiniZip at version 1.01f
 
-Change in 1.0 (Okt 2009)
+Change in 1.0 (Oct 2009)
  - **TODO - Add history**
 
