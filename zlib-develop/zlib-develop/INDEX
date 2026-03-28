@@ -1,12 +1,17 @@
+BUILD.bazel     Bazel build file
 CMakeLists.txt  cmake build file
 ChangeLog       history of changes
 FAQ             Frequently Asked Questions about zlib
 INDEX           this file
+LICENSE         zlib license
 Makefile        dummy Makefile that tells you to ./configure
 Makefile.in     template for Unix Makefile
+MODULE.bazel    Bazel module file
 README          guess what
+README-cmake.md CMake build documentation
 configure       configure script for Unix
 make_vms.com    makefile for VMS
+zlibConfig.cmake.in  cmake package config template
 test/example.c  zlib usages examples for build testing
 test/minigzip.c minimal gzip-like functionality for build testing
 test/infcover.c inf*.c code coverage for build coverage testing
@@ -21,7 +26,9 @@ zlib.pc.cmakein zlib.pc template for cmake
 zlib2ansi       perl script to convert source files for C++ compilation
 
 amiga/          makefiles for Amiga SAS C
+contrib/        unsupported contributions by third parties
 doc/            documentation for formats and algorithms
+examples/       example programs using zlib
 msdos/          makefiles for MSDOS
 old/            makefiles for various architectures and zlib documentation
                 files that have not yet been updated for zlib 1.2.x
@@ -61,7 +68,7 @@ zutil.c
 zutil.h
 
                 source files for sample programs
-See examples/README.examples
+See examples/README.examples for details.
 
                 unsupported contributions by third parties
-See contrib/README.contrib
+See contrib/README.contrib for details.
