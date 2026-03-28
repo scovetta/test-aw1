@@ -491,6 +491,126 @@ static void test_dict_inflate(Byte *compr, uLong comprLen, Byte *uncompr,
 }
 
 /* ===========================================================================
+ * Test inflate() with Z_BLOCK and Z_TREES flush modes.
+ *
+ * Z_BLOCK stops inflate at deflate block boundaries, returning control to the
+ * caller after each block.  Z_TREES additionally stops before the Huffman
+ * trees of a dynamic block are decoded.  Both modes are used for random-access
+ * and stream-splitting applications.
+ */
+static void test_inflate_block_trees(Byte *compr, uLong comprLen,
+                                     Byte *uncompr, uLong uncomprLen) {
+    /* Step 1: compress the hello string with a Z_FULL_FLUSH in the middle so
+     * the deflate stream contains at least two stored/fixed blocks that
+     * inflate can stop between when using Z_BLOCK. */
+    z_stream c_stream;
+    z_stream d_stream;
+    int err;
+    uLong half = (uLong)strlen(hello) / 2 + 1;
+    uLong compressedLen;
+
+    c_stream.zalloc = zalloc;
+    c_stream.zfree  = zfree;
+    c_stream.opaque = (voidpf)0;
+
+    err = deflateInit(&c_stream, Z_DEFAULT_COMPRESSION);
+    CHECK_ERR(err, "deflateInit (Z_BLOCK test)");
+
+    c_stream.next_in   = (z_const Bytef *)hello;
+    c_stream.avail_in  = (uInt)half;
+    c_stream.next_out  = compr;
+    c_stream.avail_out = (uInt)comprLen;
+
+    /* Flush first half to create a block boundary. */
+    err = deflate(&c_stream, Z_FULL_FLUSH);
+    CHECK_ERR(err, "deflate Z_FULL_FLUSH (Z_BLOCK test)");
+
+    c_stream.next_in  = (z_const Bytef *)(hello + half);
+    c_stream.avail_in = (uInt)(strlen(hello) + 1 - half);
+
+    err = deflate(&c_stream, Z_FINISH);
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "deflate should report Z_STREAM_END (Z_BLOCK test)\n");
+        exit(1);
+    }
+    compressedLen = c_stream.total_out;
+
+    err = deflateEnd(&c_stream);
+    CHECK_ERR(err, "deflateEnd (Z_BLOCK test)");
+
+    /* Step 2: inflate with Z_BLOCK, consuming all compressed input and
+     * verifying that the decompressed data matches the original. */
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (Z_BLOCK test)");
+
+    d_stream.next_in   = compr;
+    d_stream.avail_in  = (uInt)compressedLen;
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    /* Drive inflate to completion using Z_BLOCK so it may pause at boundaries.
+     * We loop until Z_STREAM_END is returned. */
+    do {
+        err = inflate(&d_stream, Z_BLOCK);
+    } while (err == Z_OK);
+
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate Z_BLOCK should end with Z_STREAM_END, got %d\n",
+                err);
+        exit(1);
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (Z_BLOCK test)");
+
+    if (strcmp((char *)uncompr, hello) != 0) {
+        fprintf(stderr, "inflate Z_BLOCK: bad output\n");
+        exit(1);
+    }
+    printf("inflate with Z_BLOCK: %s\n", (char *)uncompr);
+
+    /* Step 3: inflate the same stream with Z_TREES.  Z_TREES behaves like
+     * Z_BLOCK but also stops before decoding Huffman trees in dynamic blocks.
+     * We verify the final decompressed result is still correct. */
+    memset(uncompr, 0, uncomprLen);
+
+    d_stream.zalloc = zalloc;
+    d_stream.zfree  = zfree;
+    d_stream.opaque = (voidpf)0;
+
+    err = inflateInit(&d_stream);
+    CHECK_ERR(err, "inflateInit (Z_TREES test)");
+
+    d_stream.next_in   = compr;
+    d_stream.avail_in  = (uInt)compressedLen;
+    d_stream.next_out  = uncompr;
+    d_stream.avail_out = (uInt)uncomprLen;
+
+    do {
+        err = inflate(&d_stream, Z_TREES);
+    } while (err == Z_OK);
+
+    if (err != Z_STREAM_END) {
+        fprintf(stderr, "inflate Z_TREES should end with Z_STREAM_END, got %d\n",
+                err);
+        exit(1);
+    }
+
+    err = inflateEnd(&d_stream);
+    CHECK_ERR(err, "inflateEnd (Z_TREES test)");
+
+    if (strcmp((char *)uncompr, hello) != 0) {
+        fprintf(stderr, "inflate Z_TREES: bad output\n");
+        exit(1);
+    }
+    printf("inflate with Z_TREES: %s\n", (char *)uncompr);
+}
+
+/* ===========================================================================
  * Usage:  example [output.gz  [input.gz]]
  */
 
@@ -544,6 +664,9 @@ int main(int argc, char *argv[]) {
 
     test_dict_deflate(compr, comprLen);
     test_dict_inflate(compr, comprLen, uncompr, uncomprLen);
+
+    comprLen = 3 * uncomprLen;
+    test_inflate_block_trees(compr, comprLen, uncompr, uncomprLen);
 
     free(compr);
     free(uncompr);
